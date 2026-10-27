@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath \
     -ldflags="-w -s" \
     -o /app/bin/songothon-api \
-    ./cmd/api
+    .
 
 # ------------------------------------------
 # Stage 2: Final Minimal Runtime Image
@@ -40,6 +40,7 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/bin/songothon-api /app/songothon-api
+COPY --from=builder /app/migrations /app/migrations
 
 # Secure ownership
 RUN chown -R appuser:appgroup /app
@@ -52,3 +53,4 @@ HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["/app/songothon-api"]
+CMD ["serve"]

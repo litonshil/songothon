@@ -1,0 +1,29 @@
+{
+  "app": {
+    "name": "songothon",
+    "port": 8080,
+    "env": "production",
+    "log_level": "info",
+    "jwt_secret": "production-secret-songothon-jwt-token-key-2026",
+    "jwt_expiry_hours": 72
+  },
+  "db": {
+    "db": {
+      "host": "songothon_postgres",
+      "port": 5432,
+      "name": "songothon_db",
+      "username": "postgres",
+      "password": "postgres_secure_pass",
+      "ssl_mode": "disable",
+      "max_life_time": 3600,
+      "max_idle_conn": 5,
+      "max_open_conn": 25
+    }
+  },
+  "fcm": {
+    "fcm": {
+      "server_key": "",
+      "project_id": "songothon-dev"
+    }
+  }
+}

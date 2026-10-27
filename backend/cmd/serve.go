@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"context"
@@ -12,8 +12,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/spf13/cobra"
 
-	"songothon/internal/config"
+	"songothon/client/conn"
+	"songothon/config"
 	"songothon/internal/handler"
 	appmw "songothon/internal/middleware"
 	"songothon/internal/repository/postgres"
@@ -24,30 +26,27 @@ import (
 	"songothon/pkg/token"
 )
 
-func main() {
+var serveCmd = &cobra.Command{
+	Use:   "serve",
+	Short: "Start the Songothon HTTP server",
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		if err := runServer(ctx); err != nil {
+			log.Fatalf("Server stopped unexpectedly: %v", err)
+		}
+	},
+}
+
+func runServer(ctx context.Context) error {
+	appCfg := config.App()
+	fcmCfg := config.FCM().FCM
+
 	log.Println("Starting Songothon Multi-Tenant Platform API Server...")
 
-	// 1. Load Configuration
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		log.Fatalf("Failed to load environment configuration: %v", err)
-	}
-
-	// 2. Initialize Database Pool & Run Migrations
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
-
-	db, err := postgres.NewDB(ctx, cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Database connection failed: %v", err)
-	}
-	defer db.Close()
-
-	// 3. Initialize Shared Modules (Token Manager, FCM Client)
-	tokenMgr := token.NewTokenManager(cfg.JWTSecret, cfg.JWTExpiry, "songothon-api")
-	fcmClient := fcm.NewFCMClient(cfg.FCMServerKey, cfg.FCMProjectID)
-
-	// 4. Initialize Repositories
+	// 1. Repositories
+	db := postgres.NewDB(conn.Db())
 	userRepo := postgres.NewUserRepository(db)
 	orgRepo := postgres.NewOrgRepository(db)
 	contribRepo := postgres.NewContributionRepository(db)
@@ -57,7 +56,11 @@ func main() {
 	notifRepo := postgres.NewNotificationRepository(db)
 	auditRepo := postgres.NewAuditRepository(db)
 
-	// 5. Initialize Services
+	// 2. Shared modules
+	tokenMgr := token.NewTokenManager(appCfg.JWTSecret, time.Duration(appCfg.JWTExpiryHours)*time.Hour, "songothon-api")
+	fcmClient := fcm.NewFCMClient(fcmCfg.ServerKey, fcmCfg.ProjectID)
+
+	// 3. Services
 	notifService := service.NewNotificationService(notifRepo, userRepo, orgRepo, fcmClient)
 	authService := service.NewAuthService(userRepo, orgRepo, tokenMgr)
 	orgService := service.NewOrgService(orgRepo, userRepo, auditRepo, notifService)
@@ -67,7 +70,7 @@ func main() {
 	incService := service.NewIncomeService(incRepo, auditRepo)
 	reportService := service.NewReportService(orgRepo, contribRepo, invRepo, expRepo, incRepo)
 
-	// 6. Initialize Handlers
+	// 4. Handlers
 	authHandler := handler.NewAuthHandler(authService)
 	orgHandler := handler.NewOrgHandler(orgService)
 	contribHandler := handler.NewContributionHandler(contribService)
@@ -77,18 +80,17 @@ func main() {
 	reportHandler := handler.NewReportHandler(reportService)
 	notifHandler := handler.NewNotificationHandler(notifService)
 
-	// 7. Initialize & Start Background Dues Worker
+	// 5. Background dues worker
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
 	duesWorker := worker.NewDuesWorker(db.Pool, notifService, 6*time.Hour)
 	duesWorker.Start(workerCtx)
 
-	// 8. Setup Echo HTTP Engine
+	// 6. HTTP engine
 	e := echo.New()
 	e.HideBanner = true
 
-	// Standard Global Middlewares
 	e.Use(echomw.LoggerWithConfig(echomw.LoggerConfig{
 		Format: "[${time_rfc3339}] ${status} ${method} ${uri} (${latency_human})\n",
 	}))
@@ -99,18 +101,16 @@ func main() {
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization, "X-Org-Slug", "X-Org-ID"},
 	}))
 
-	// Health Check
 	e.GET("/health", func(c echo.Context) error {
 		return response.Success(c, "Songothon API is online and healthy", echo.Map{
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
-			"env":       cfg.AppEnv,
+			"env":       appCfg.Env,
 		})
 	})
 
-	// API v1 Routing
 	v1 := e.Group("/api/v1")
 
-	// --- 8.1 Public Auth Routes ---
+	// --- Public Auth Routes ---
 	v1.POST("/auth/register", authHandler.Register)
 	v1.POST("/auth/login", authHandler.Login)
 	v1.POST("/auth/forgot-password", authHandler.ForgotPassword)
@@ -119,7 +119,7 @@ func main() {
 	// clearing its FCM registration. Token is parsed internally if present.
 	v1.POST("/auth/logout", authHandler.LogoutPublic(tokenMgr))
 
-	// --- 8.2 Authenticated Base Routes (User-Scoped) ---
+	// --- Authenticated Base Routes (User-Scoped) ---
 	authGroup := v1.Group("")
 	authGroup.Use(appmw.AuthMiddleware(tokenMgr))
 
@@ -134,7 +134,7 @@ func main() {
 	authGroup.GET("/organizations", orgHandler.ListMyOrgs)
 	authGroup.POST("/organizations/join", orgHandler.JoinOrg)
 
-	// --- 8.3 Multi-Tenant Routes (Tenant-Scoped) ---
+	// --- Multi-Tenant Routes (Tenant-Scoped) ---
 	// Resolves tenant via URL slug param ':slug' or 'X-Org-Slug' header
 	tenantGroup := authGroup.Group("/organizations/:slug")
 	tenantGroup.Use(appmw.TenantMiddleware(orgRepo))
@@ -181,26 +181,35 @@ func main() {
 	adminGroup.GET("/notifications/scheduled", notifHandler.ListScheduled)
 	adminGroup.DELETE("/notifications/scheduled/:id", notifHandler.DeleteScheduled)
 
-	// 9. Start Server with Graceful Shutdown
+	// 7. Start server and shut down gracefully when ctx is cancelled
+	serverErr := make(chan error, 1)
 	go func() {
-		addr := fmt.Sprintf(":%s", cfg.Port)
-		log.Printf("Server listening on port %s (env: %s)\n", cfg.Port, cfg.AppEnv)
+		addr := fmt.Sprintf(":%d", appCfg.Port)
+		log.Printf("Server listening on port %d (env: %s)\n", appCfg.Port, appCfg.Env)
 		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server stopped unexpectedly: %v", err)
+			serverErr <- err
 		}
+		close(serverErr)
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
+	select {
+	case err := <-serverErr:
+		return err
+	case <-ctx.Done():
+	}
 
 	log.Println("Shutting down API server gracefully...")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
 	if err := e.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
 
 	log.Println("Server exiting complete.")
+	return nil
+}
+
+func RegisterServeCommand() {
+	RegisterSubCommand(serveCmd)
 }

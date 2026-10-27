@@ -1,4 +1,4 @@
-.PHONY: up down restart logs build backend-run flutter-run test tidy
+.PHONY: up down restart logs build backend-run migrate-up migrate-down flutter-run test tidy
 
 up:
 	docker compose up -d --build
@@ -16,7 +16,13 @@ build:
 	docker compose build
 
 backend-run:
-	cd backend && go run cmd/api/main.go
+	cd backend && CONFIG_FILE_PATH=config.local.json go run . serve
+
+migrate-up:
+	cd backend && CONFIG_FILE_PATH=config.local.json go run . migrate up
+
+migrate-down:
+	cd backend && CONFIG_FILE_PATH=config.local.json go run . migrate down
 
 flutter-run:
 	cd mobile && flutter run
