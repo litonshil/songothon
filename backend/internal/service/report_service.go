@@ -13,17 +13,23 @@ type ReportService struct {
 	orgRepo     *postgres.OrgRepository
 	contribRepo *postgres.ContributionRepository
 	invRepo     *postgres.InvestmentRepository
+	expRepo     *postgres.ExpenseRepository
+	incRepo     *postgres.IncomeRepository
 }
 
 func NewReportService(
 	orgRepo *postgres.OrgRepository,
 	contribRepo *postgres.ContributionRepository,
 	invRepo *postgres.InvestmentRepository,
+	expRepo *postgres.ExpenseRepository,
+	incRepo *postgres.IncomeRepository,
 ) *ReportService {
 	return &ReportService{
 		orgRepo:     orgRepo,
 		contribRepo: contribRepo,
 		invRepo:     invRepo,
+		expRepo:     expRepo,
+		incRepo:     incRepo,
 	}
 }
 
@@ -54,6 +60,8 @@ func (s *ReportService) GetMemberDashboard(
 
 	vaultBalance, _ := s.contribRepo.GetVaultBalance(ctx, org.ID)
 	totalOrgDeposits, _ := s.contribRepo.GetOrgTotalDeposits(ctx, org.ID)
+	totalExpense, _ := s.expRepo.GetTotalExpense(ctx, org.ID)
+	totalIncome, _ := s.incRepo.GetTotalIncome(ctx, org.ID)
 	investedCapital, _ := s.invRepo.GetTotalActiveCapital(ctx, org.ID)
 	liquidityReserve := vaultBalance - investedCapital
 	if liquidityReserve < 0 {
@@ -121,6 +129,8 @@ func (s *ReportService) GetMemberDashboard(
 		CurrentCycleStatus:           currentStatus,
 		IsCurrentCyclePaid:           isCyclePaid,
 		TotalOrgDeposits:             totalOrgDeposits,
+		TotalExpense:                 totalExpense,
+		TotalIncome:                  totalIncome,
 		VaultBalance:                 vaultBalance,
 		InvestedCapital:              investedCapital,
 		LiquidityReserve:             liquidityReserve,
@@ -168,6 +178,8 @@ func (s *ReportService) GetAdminDashboard(
 
 	vaultBalance, _ := s.contribRepo.GetVaultBalance(ctx, org.ID)
 	totalDeposits, _ := s.contribRepo.GetOrgTotalDeposits(ctx, org.ID)
+	totalExpense, _ := s.expRepo.GetTotalExpense(ctx, org.ID)
+	totalIncome, _ := s.incRepo.GetTotalIncome(ctx, org.ID)
 	investedCapital, _ := s.invRepo.GetTotalActiveCapital(ctx, org.ID)
 	liquidityReserve := vaultBalance - investedCapital
 	if liquidityReserve < 0 {
@@ -217,6 +229,8 @@ func (s *ReportService) GetAdminDashboard(
 		OrganizationSlug:         org.Slug,
 		Currency:                 org.Currency,
 		TotalDeposits:            totalDeposits,
+		TotalExpense:             totalExpense,
+		TotalIncome:              totalIncome,
 		TotalVaultBalance:        vaultBalance,
 		TotalInvestedCapital:     investedCapital,
 		AvailableLiquidity:       liquidityReserve,

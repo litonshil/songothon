@@ -80,6 +80,8 @@ class AdminDashboardModel extends Equatable {
   final String organizationSlug;
   final String currency;
   final double totalDeposits;
+  final double totalExpense;
+  final double totalIncome;
   final double totalVaultBalance;
   final double totalInvestedCapital;
   final double availableLiquidity;
@@ -100,6 +102,8 @@ class AdminDashboardModel extends Equatable {
     required this.organizationSlug,
     required this.currency,
     required this.totalDeposits,
+    this.totalExpense = 0.0,
+    this.totalIncome = 0.0,
     required this.totalVaultBalance,
     required this.totalInvestedCapital,
     required this.availableLiquidity,
@@ -125,6 +129,8 @@ class AdminDashboardModel extends Equatable {
       organizationSlug: json['organization_slug']?.toString() ?? '',
       currency: json['currency']?.toString() ?? 'BDT',
       totalDeposits: (json['total_deposits'] as num?)?.toDouble() ?? 0.0,
+      totalExpense: (json['total_expense'] as num?)?.toDouble() ?? 0.0,
+      totalIncome: (json['total_income'] as num?)?.toDouble() ?? 0.0,
       totalVaultBalance: (json['total_vault_balance'] as num?)?.toDouble() ?? 0.0,
       totalInvestedCapital: (json['total_invested_capital'] as num?)?.toDouble() ?? 0.0,
       availableLiquidity: (json['available_liquidity'] as num?)?.toDouble() ?? 0.0,
@@ -154,6 +160,8 @@ class AdminDashboardModel extends Equatable {
         organizationSlug,
         currency,
         totalDeposits,
+        totalExpense,
+        totalIncome,
         totalVaultBalance,
         totalInvestedCapital,
         availableLiquidity,

@@ -14,6 +14,7 @@ const (
 	TxInvestmentDividend     TransactionType = "investment_dividend"
 	TxInvestmentLiquidation  TransactionType = "investment_liquidation"
 	TxExpense                TransactionType = "expense"
+	TxIncome                 TransactionType = "income"
 	TxOther                  TransactionType = "other"
 )
 

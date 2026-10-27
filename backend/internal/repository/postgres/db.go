@@ -65,6 +65,12 @@ func (db *DB) AutoMigrate(ctx context.Context) error {
 	if _, err := db.Pool.Exec(ctx, migrations.RequirementsSQL); err != nil {
 		return fmt.Errorf("failed to apply requirements migrations: %w", err)
 	}
+	if _, err := db.Pool.Exec(ctx, migrations.ExpensesSQL); err != nil {
+		return fmt.Errorf("failed to apply expenses migrations: %w", err)
+	}
+	if _, err := db.Pool.Exec(ctx, migrations.IncomesSQL); err != nil {
+		return fmt.Errorf("failed to apply incomes migrations: %w", err)
+	}
 
 	log.Println("Applying initial seed data if not present...")
 	if _, err := db.Pool.Exec(ctx, migrations.SeedSQL); err != nil {

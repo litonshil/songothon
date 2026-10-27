@@ -92,6 +92,8 @@ class MemberDashboardModel extends Equatable {
   final String currentCycleStatus;
   final bool isCurrentCyclePaid;
   final double totalOrgDeposits;
+  final double totalExpense;
+  final double totalIncome;
   final double vaultBalance;
   final double investedCapital;
   final double liquidityReserve;
@@ -123,6 +125,8 @@ class MemberDashboardModel extends Equatable {
     required this.currentCycleStatus,
     required this.isCurrentCyclePaid,
     required this.totalOrgDeposits,
+    this.totalExpense = 0.0,
+    this.totalIncome = 0.0,
     required this.vaultBalance,
     required this.investedCapital,
     required this.liquidityReserve,
@@ -158,6 +162,8 @@ class MemberDashboardModel extends Equatable {
           ((json['is_current_cycle_paid'] as bool? ?? false) ? 'Paid' : 'Unpaid'),
       isCurrentCyclePaid: json['is_current_cycle_paid'] as bool? ?? false,
       totalOrgDeposits: (json['total_org_deposits'] as num?)?.toDouble() ?? 0.0,
+      totalExpense: (json['total_expense'] as num?)?.toDouble() ?? 0.0,
+      totalIncome: (json['total_income'] as num?)?.toDouble() ?? 0.0,
       vaultBalance: (json['vault_balance'] as num?)?.toDouble() ?? 0.0,
       investedCapital: (json['invested_capital'] as num?)?.toDouble() ?? 0.0,
       liquidityReserve: (json['liquidity_reserve'] as num?)?.toDouble() ?? 0.0,
@@ -191,6 +197,8 @@ class MemberDashboardModel extends Equatable {
         currentCycleStatus,
         isCurrentCyclePaid,
         totalOrgDeposits,
+        totalExpense,
+        totalIncome,
         vaultBalance,
         investedCapital,
         liquidityReserve,

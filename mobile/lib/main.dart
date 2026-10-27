@@ -10,6 +10,8 @@ import 'features/organization/data/repositories/org_repository.dart';
 import 'features/contributions/data/repositories/contribution_repository.dart';
 import 'features/dashboard/data/repositories/dashboard_repository.dart';
 import 'features/investments/data/repositories/investment_repository.dart';
+import 'features/expenses/data/repositories/expense_repository.dart';
+import 'features/income/data/repositories/income_repository.dart';
 import 'features/notifications/data/repositories/notification_repository.dart';
 
 // Cubits / State
@@ -39,6 +41,8 @@ void main() async {
   final contributionRepository = ContributionRepository(apiClient: apiClient);
   final dashboardRepository = DashboardRepository(apiClient: apiClient);
   final investmentRepository = InvestmentRepository(apiClient: apiClient);
+  final expenseRepository = ExpenseRepository(apiClient: apiClient);
+  final incomeRepository = IncomeRepository(apiClient: apiClient);
   final notificationRepository = NotificationRepository(apiClient: apiClient);
 
   runApp(SongothonApp(
@@ -48,6 +52,8 @@ void main() async {
     contributionRepository: contributionRepository,
     dashboardRepository: dashboardRepository,
     investmentRepository: investmentRepository,
+    expenseRepository: expenseRepository,
+    incomeRepository: incomeRepository,
     notificationRepository: notificationRepository,
   ));
 }
@@ -59,6 +65,8 @@ class SongothonApp extends StatelessWidget {
   final ContributionRepository contributionRepository;
   final DashboardRepository dashboardRepository;
   final InvestmentRepository investmentRepository;
+  final ExpenseRepository expenseRepository;
+  final IncomeRepository incomeRepository;
   final NotificationRepository notificationRepository;
 
   const SongothonApp({
@@ -69,6 +77,8 @@ class SongothonApp extends StatelessWidget {
     required this.contributionRepository,
     required this.dashboardRepository,
     required this.investmentRepository,
+    required this.expenseRepository,
+    required this.incomeRepository,
     required this.notificationRepository,
   });
 
@@ -82,6 +92,8 @@ class SongothonApp extends StatelessWidget {
         RepositoryProvider<ContributionRepository>.value(value: contributionRepository),
         RepositoryProvider<DashboardRepository>.value(value: dashboardRepository),
         RepositoryProvider<InvestmentRepository>.value(value: investmentRepository),
+        RepositoryProvider<ExpenseRepository>.value(value: expenseRepository),
+        RepositoryProvider<IncomeRepository>.value(value: incomeRepository),
         RepositoryProvider<NotificationRepository>.value(value: notificationRepository),
       ],
       child: MultiBlocProvider(

@@ -146,6 +146,20 @@ class _DashboardTabState extends State<DashboardTab> {
                 )),
               ],
             ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: StatTile(
+                  label: 'Total Income', value: formatCompactMoney(admin.totalIncome, _currency),
+                  icon: Icons.trending_up_rounded, accent: AppTheme.accentGreen,
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: StatTile(
+                  label: 'Total Expense', value: formatCompactMoney(admin.totalExpense, _currency),
+                  icon: Icons.payments_outlined, accent: AppTheme.warningOrange,
+                )),
+              ],
+            ),
             const SizedBox(height: 20),
           ] else ...[
             Row(
@@ -186,6 +200,20 @@ class _DashboardTabState extends State<DashboardTab> {
                 Expanded(child: StatTile(
                   label: 'Active Investments', value: '${member.activeInvestmentsCount}',
                   icon: Icons.pie_chart_outline_rounded, accent: AppTheme.darkGreen,
+                )),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: StatTile(
+                  label: 'Total Income', value: formatCompactMoney(member.totalIncome, _currency),
+                  icon: Icons.trending_up_rounded, accent: AppTheme.accentGreen,
+                )),
+                const SizedBox(width: 10),
+                Expanded(child: StatTile(
+                  label: 'Total Expense', value: formatCompactMoney(member.totalExpense, _currency),
+                  icon: Icons.payments_outlined, accent: AppTheme.warningOrange,
                 )),
               ],
             ),

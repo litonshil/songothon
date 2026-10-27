@@ -48,6 +48,8 @@ type MemberDashboardData struct {
 	CurrentCycleStatus           string                    `json:"current_cycle_status"` // Paid, Pending, Unpaid
 	IsCurrentCyclePaid           bool                      `json:"is_current_cycle_paid"`
 	TotalOrgDeposits             float64                   `json:"total_org_deposits"`
+	TotalExpense                 float64                   `json:"total_expense"`
+	TotalIncome                  float64                   `json:"total_income"`
 	VaultBalance                 float64                   `json:"vault_balance"`
 	InvestedCapital              float64                   `json:"invested_capital"`
 	LiquidityReserve             float64                   `json:"liquidity_reserve"`
@@ -73,6 +75,8 @@ type AdminDashboardData struct {
 	OrganizationSlug         string                   `json:"organization_slug"`
 	Currency                 string                   `json:"currency"`
 	TotalDeposits            float64                  `json:"total_deposits"`
+	TotalExpense             float64                  `json:"total_expense"`
+	TotalIncome              float64                  `json:"total_income"`
 	TotalVaultBalance        float64                  `json:"total_vault_balance"`
 	TotalInvestedCapital     float64                  `json:"total_invested_capital"`
 	AvailableLiquidity       float64                  `json:"available_liquidity"`

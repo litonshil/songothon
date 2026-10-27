@@ -6,6 +6,8 @@ import '../../../../core/utils/formatters.dart';
 import '../../../auth/presentation/bloc/auth_cubit.dart';
 import '../../../dashboard/data/models/member_dashboard_model.dart';
 import '../../../dashboard/data/repositories/dashboard_repository.dart';
+import '../../../expenses/presentation/screens/expenses_screen.dart';
+import '../../../income/presentation/screens/incomes_screen.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../organization/presentation/screens/admin_tools_screen.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
@@ -139,6 +141,38 @@ class _MoreTabState extends State<MoreTab> {
                 title: 'Notifications',
                 subtitle: 'Payment updates and announcements',
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+              ),
+              const Divider(height: 1),
+              _MenuTile(
+                icon: Icons.payments_outlined,
+                title: 'Expenses',
+                subtitle: widget.isAdmin ? 'Record and review organization spending' : 'Review organization spending',
+                onTap: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => ExpensesScreen(
+                      orgSlug: widget.orgSlug,
+                      isAdmin: widget.isAdmin,
+                      currency: dashboard?.currency ?? 'BDT',
+                    ),
+                  ));
+                  widget.onRefreshShell();
+                },
+              ),
+              const Divider(height: 1),
+              _MenuTile(
+                icon: Icons.trending_up_rounded,
+                title: 'Income',
+                subtitle: widget.isAdmin ? 'Record and review organization income' : 'Review organization income',
+                onTap: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => IncomesScreen(
+                      orgSlug: widget.orgSlug,
+                      isAdmin: widget.isAdmin,
+                      currency: dashboard?.currency ?? 'BDT',
+                    ),
+                  ));
+                  widget.onRefreshShell();
+                },
               ),
               const Divider(height: 1),
               _MenuTile(

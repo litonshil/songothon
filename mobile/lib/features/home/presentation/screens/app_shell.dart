@@ -41,9 +41,24 @@ class _AppShellState extends State<AppShell> {
         orgSlug: widget.orgSlug,
         onRefreshShell: _refreshShell,
       ),
-      DepositsTab(key: ValueKey('deposits-${widget.orgSlug}'), orgSlug: widget.orgSlug, isAdmin: widget.isAdmin),
-      MembersTab(key: ValueKey('members-${widget.orgSlug}'), orgSlug: widget.orgSlug, isAdmin: widget.isAdmin),
-      InvestmentsTab(key: ValueKey('investments-${widget.orgSlug}'), orgSlug: widget.orgSlug, isAdmin: widget.isAdmin),
+      DepositsTab(
+        key: ValueKey('deposits-${widget.orgSlug}'),
+        orgSlug: widget.orgSlug,
+        isAdmin: widget.isAdmin,
+        onRefreshShell: _refreshShell,
+      ),
+      MembersTab(
+        key: ValueKey('members-${widget.orgSlug}'),
+        orgSlug: widget.orgSlug,
+        isAdmin: widget.isAdmin,
+        onRefreshShell: _refreshShell,
+      ),
+      InvestmentsTab(
+        key: ValueKey('investments-${widget.orgSlug}'),
+        orgSlug: widget.orgSlug,
+        isAdmin: widget.isAdmin,
+        onRefreshShell: _refreshShell,
+      ),
       MoreTab(
         key: ValueKey('more-${widget.orgSlug}'),
         orgSlug: widget.orgSlug,
@@ -56,42 +71,30 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: InkWell(
-          onTap: _switchOrg,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.account_balance_wallet_rounded, size: 17, color: AppTheme.accentGreen),
-                ),
-                const SizedBox(width: 10),
-                const Text('Songothon', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    '@${widget.orgSlug}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.55), fontWeight: FontWeight.w500),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: Colors.white.withValues(alpha: 0.55)),
-              ],
+        title: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.account_balance_wallet_rounded, size: 17, color: AppTheme.accentGreen),
             ),
-          ),
+            const SizedBox(width: 10),
+            const Text('Songothon', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          ],
         ),
         actions: [
           IconButton(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            onPressed: () => Navigator.of(context).push(
+              PageRouteBuilder(
+                transitionDuration: const Duration(milliseconds: 200),
+                pageBuilder: (_, _, _) => const NotificationsScreen(),
+                transitionsBuilder: (_, animation, _, child) => FadeTransition(opacity: animation, child: child),
+              ),
+            ),
             tooltip: 'Notifications',
             icon: const Icon(Icons.notifications_none_rounded),
           ),

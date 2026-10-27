@@ -26,7 +26,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _load() async {
     setState(() {
-      _loading = true;
+      if (_items.isEmpty) _loading = true;
       _error = null;
     });
     try {

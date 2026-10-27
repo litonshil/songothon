@@ -9,8 +9,9 @@ import '../../data/repositories/investment_repository.dart';
 class InvestmentsTab extends StatefulWidget {
   final String orgSlug;
   final bool isAdmin;
+  final VoidCallback onRefreshShell;
 
-  const InvestmentsTab({super.key, required this.orgSlug, required this.isAdmin});
+  const InvestmentsTab({super.key, required this.orgSlug, required this.isAdmin, required this.onRefreshShell});
 
   @override
   State<InvestmentsTab> createState() => _InvestmentsTabState();
@@ -203,6 +204,7 @@ class _InvestmentsTabState extends State<InvestmentsTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Investment deleted.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));

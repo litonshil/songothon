@@ -11,8 +11,9 @@ import '../widgets/submit_payment_bottom_sheet.dart';
 class DepositsTab extends StatefulWidget {
   final String orgSlug;
   final bool isAdmin;
+  final VoidCallback onRefreshShell;
 
-  const DepositsTab({super.key, required this.orgSlug, required this.isAdmin});
+  const DepositsTab({super.key, required this.orgSlug, required this.isAdmin, required this.onRefreshShell});
 
   @override
   State<DepositsTab> createState() => _DepositsTabState();
@@ -66,7 +67,10 @@ class _DepositsTabState extends State<DepositsTab> {
       orgSlug: widget.orgSlug,
       currentCycle: cycle,
       defaultAmount: amount,
-      onSuccess: _load,
+      onSuccess: () {
+        _load();
+        widget.onRefreshShell();
+      },
     );
   }
 
@@ -78,6 +82,7 @@ class _DepositsTabState extends State<DepositsTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deposit approved.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));
@@ -111,6 +116,7 @@ class _DepositsTabState extends State<DepositsTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deposit rejected.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));

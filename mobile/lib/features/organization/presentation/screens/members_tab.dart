@@ -10,8 +10,9 @@ import '../../../shared/presentation/widgets/app_widgets.dart';
 class MembersTab extends StatefulWidget {
   final String orgSlug;
   final bool isAdmin;
+  final VoidCallback onRefreshShell;
 
-  const MembersTab({super.key, required this.orgSlug, required this.isAdmin});
+  const MembersTab({super.key, required this.orgSlug, required this.isAdmin, required this.onRefreshShell});
 
   @override
   State<MembersTab> createState() => _MembersTabState();
@@ -139,6 +140,7 @@ class _MembersTabState extends State<MembersTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invitation sent.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));
@@ -156,6 +158,7 @@ class _MembersTabState extends State<MembersTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(approve ? 'Request approved.' : 'Request rejected.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));
@@ -288,6 +291,7 @@ class _MembersTabState extends State<MembersTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$shares share${shares == 1 ? '' : 's'} assigned to ${member.fullName}.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));
@@ -308,6 +312,7 @@ class _MembersTabState extends State<MembersTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Member removed.')));
       _load();
+      widget.onRefreshShell();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));

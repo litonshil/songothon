@@ -54,6 +54,7 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
   late final TextEditingController _senderController;
   late final TextEditingController _trxIdController;
   late final TextEditingController _cycleController;
+  late DateTime _cycle;
   late final TextEditingController _notesController;
   late final TextEditingController _receiptController;
 
@@ -71,7 +72,8 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
     _amountController = TextEditingController(text: widget.defaultAmount.toStringAsFixed(0));
     _senderController = TextEditingController();
     _trxIdController = TextEditingController();
-    _cycleController = TextEditingController(text: widget.currentCycle);
+    _cycle = DateTime.now();
+    _cycleController = TextEditingController(text: _formatCycle(_cycle));
     _notesController = TextEditingController();
     _receiptController = TextEditingController();
   }
@@ -85,6 +87,20 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
     _notesController.dispose();
     _receiptController.dispose();
     super.dispose();
+  }
+
+  String _formatCycle(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}';
+
+  Future<void> _pickCycle() async {
+    final picked = await showDialog<DateTime>(
+      context: context,
+      builder: (_) => _MonthPickerDialog(initial: _cycle),
+    );
+    if (picked == null) return;
+    setState(() {
+      _cycle = picked;
+      _cycleController.text = _formatCycle(picked);
+    });
   }
 
   void _handleSubmit() {
@@ -212,7 +228,7 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'share_installment', label: Text('Share Installment')),
+                      ButtonSegment(value: 'share_installment', label: Text('Installment')),
                       ButtonSegment(value: 'down_payment', label: Text('Down Payment')),
                     ],
                     selected: {_selectedType},
@@ -267,11 +283,13 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                   // Amount
                   TextFormField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    enabled: !isSubmitting,
+                    readOnly: true,
+                    enableInteractiveSelection: false,
                     decoration: InputDecoration(
                       labelText: 'Amount (BDT)',
                       prefixText: '৳ ',
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
@@ -341,10 +359,13 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                   // Target Cycle
                   TextFormField(
                     controller: _cycleController,
-                    enabled: !isSubmitting,
+                    readOnly: true,
+                    enableInteractiveSelection: false,
+                    onTap: isSubmitting ? null : _pickCycle,
                     decoration: InputDecoration(
                       labelText: 'Target Cycle (Year-Month)',
                       hintText: '2026-10',
+                      suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
                       prefixIcon: const Icon(Icons.calendar_month_outlined, size: 20),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -414,6 +435,94 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+class _MonthPickerDialog extends StatefulWidget {
+  final DateTime initial;
+
+  const _MonthPickerDialog({required this.initial});
+
+  @override
+  State<_MonthPickerDialog> createState() => _MonthPickerDialogState();
+}
+
+class _MonthPickerDialogState extends State<_MonthPickerDialog> {
+  static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  late int _year = widget.initial.year;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          width: 280,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => setState(() => _year--),
+                    icon: const Icon(Icons.chevron_left_rounded),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '$_year',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _year++),
+                    icon: const Icon(Icons.chevron_right_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 2,
+                children: List.generate(12, (i) {
+                  final month = i + 1;
+                  final isSelected = _year == widget.initial.year && month == widget.initial.month;
+                  final isCurrent = _year == now.year && month == now.month;
+                  return InkWell(
+                    onTap: () => Navigator.of(context).pop(DateTime(_year, month)),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF0F766E) : Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isCurrent && !isSelected ? const Color(0xFF0F766E) : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Text(
+                        _monthNames[i],
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? Colors.white : const Color(0xFF334155),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

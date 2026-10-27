@@ -52,6 +52,8 @@ func main() {
 	orgRepo := postgres.NewOrgRepository(db)
 	contribRepo := postgres.NewContributionRepository(db)
 	invRepo := postgres.NewInvestmentRepository(db)
+	expRepo := postgres.NewExpenseRepository(db)
+	incRepo := postgres.NewIncomeRepository(db)
 	notifRepo := postgres.NewNotificationRepository(db)
 	auditRepo := postgres.NewAuditRepository(db)
 
@@ -61,13 +63,17 @@ func main() {
 	orgService := service.NewOrgService(orgRepo, userRepo, auditRepo, notifService)
 	contribService := service.NewContributionService(contribRepo, orgRepo, auditRepo, notifService)
 	invService := service.NewInvestmentService(invRepo, auditRepo)
-	reportService := service.NewReportService(orgRepo, contribRepo, invRepo)
+	expService := service.NewExpenseService(expRepo, auditRepo)
+	incService := service.NewIncomeService(incRepo, auditRepo)
+	reportService := service.NewReportService(orgRepo, contribRepo, invRepo, expRepo, incRepo)
 
 	// 6. Initialize Handlers
 	authHandler := handler.NewAuthHandler(authService)
 	orgHandler := handler.NewOrgHandler(orgService)
 	contribHandler := handler.NewContributionHandler(contribService)
 	invHandler := handler.NewInvestmentHandler(invService)
+	expHandler := handler.NewExpenseHandler(expService)
+	incHandler := handler.NewIncomeHandler(incService)
 	reportHandler := handler.NewReportHandler(reportService)
 	notifHandler := handler.NewNotificationHandler(notifService)
 
@@ -143,6 +149,8 @@ func main() {
 	tenantGroup.GET("/investments/:id", invHandler.GetByID)
 	tenantGroup.GET("/investments/metrics", invHandler.GetPortfolioMetrics)
 	tenantGroup.GET("/down-payments", orgHandler.ListDownPaymentSchemes)
+	tenantGroup.GET("/expenses", expHandler.ListExpenses)
+	tenantGroup.GET("/incomes", incHandler.ListIncomes)
 
 	// Tenant Org-Admin Endpoints (Restricted to 'org_admin' role in this tenant)
 	adminGroup := tenantGroup.Group("/admin")
@@ -166,6 +174,8 @@ func main() {
 	adminGroup.POST("/investments", invHandler.CreateInvestment)
 	adminGroup.PUT("/investments/:id", invHandler.UpdateInvestment)
 	adminGroup.DELETE("/investments/:id", invHandler.DeleteInvestment)
+	adminGroup.POST("/expenses", expHandler.CreateExpense)
+	adminGroup.POST("/incomes", incHandler.CreateIncome)
 	adminGroup.POST("/notifications/broadcast", notifHandler.Broadcast)
 	adminGroup.POST("/notifications/schedule", notifHandler.Schedule)
 	adminGroup.GET("/notifications/scheduled", notifHandler.ListScheduled)

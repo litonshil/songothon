@@ -49,6 +49,10 @@ class ApiConstants {
   static String portfolioMetrics(String slug) => '/organizations/$slug/investments/metrics';
   static String adminCreateInvestmentForOrg(String slug) => '/organizations/$slug/admin/investments';
   static String adminUpdateInvestmentForOrg(String slug, String id) => '/organizations/$slug/admin/investments/$id';
+  static String expensesForOrg(String slug) => '/organizations/$slug/expenses';
+  static String adminCreateExpenseForOrg(String slug) => '/organizations/$slug/admin/expenses';
+  static String incomesForOrg(String slug) => '/organizations/$slug/incomes';
+  static String adminCreateIncomeForOrg(String slug) => '/organizations/$slug/admin/incomes';
   static String membersForOrg(String slug) => '/organizations/$slug/members';
   static String adminInviteMember(String slug) => '/organizations/$slug/admin/members/invite';
   static String adminUpdateMember(String slug, String userId) => '/organizations/$slug/admin/members/$userId';
