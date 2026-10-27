@@ -22,15 +22,15 @@ services:
     container_name: songothon_postgres
     image: postgres:16-alpine
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
       - songothon_db:/var/lib/postgresql/data:rw
     environment:
-      - POSTGRES_DB=${DB_NAME:-songothon_db}
-      - POSTGRES_USER=${DB_USER:-postgres}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres_secure_pass}
+      - POSTGRES_DB=songothon_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_secure_pass
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-songothon_db}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d songothon_db"]
       interval: 5s
       timeout: 3s
       retries: 5

@@ -1,4 +1,4 @@
-.PHONY: up down restart logs build backend-run migrate-up migrate-down flutter-run test tidy
+.PHONY: up down restart logs build consul-upload-local backend-run migrate-up migrate-down flutter-run test tidy
 
 up:
 	docker compose up -d --build
@@ -15,14 +15,17 @@ logs:
 build:
 	docker compose build
 
+consul-upload-local:
+	curl -sf -X PUT --data-binary @backend/config.local.json http://localhost:8500/v1/kv/songothon-local && echo 'local config uploaded to consul key songothon-local'
+
 backend-run:
-	cd backend && CONFIG_FILE_PATH=config.local.json go run . serve
+	cd backend && CONSUL_URL=http://localhost:8500 CONSUL_PATH=songothon-local go run . serve
 
 migrate-up:
-	cd backend && CONFIG_FILE_PATH=config.local.json go run . migrate up
+	cd backend && CONSUL_URL=http://localhost:8500 CONSUL_PATH=songothon-local go run . migrate up
 
 migrate-down:
-	cd backend && CONFIG_FILE_PATH=config.local.json go run . migrate down
+	cd backend && CONSUL_URL=http://localhost:8500 CONSUL_PATH=songothon-local go run . migrate down
 
 flutter-run:
 	cd mobile && flutter run

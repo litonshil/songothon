@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"log"
 
 	"github.com/spf13/viper"
@@ -72,24 +73,18 @@ func Load() error {
 		return err
 	}
 
-	configFilePath := viper.GetString("CONFIG_FILE_PATH")
 	consulURL := viper.GetString("CONSUL_URL")
 	consulPath := viper.GetString("CONSUL_PATH")
 
-	if configFilePath != "" {
-		return loadConfigFromFile(configFilePath)
+	if consulURL == "" || consulPath == "" {
+		return errors.New("CONSUL_URL and CONSUL_PATH must be set")
 	}
 
-	if consulURL != "" && consulPath != "" {
-		return loadConfigFromConsul(consulURL, consulPath)
-	}
-
-	log.Println("CONFIG_FILE_PATH or CONSUL_URL and CONSUL_PATH are missing from ENV, using default config")
-	return unmarshalConfig()
+	return loadConfigFromConsul(consulURL, consulPath)
 }
 
 func bindEnvVariables() error {
-	envVars := []string{"CONSUL_URL", "CONSUL_PATH", "CONFIG_FILE_PATH"}
+	envVars := []string{"CONSUL_URL", "CONSUL_PATH"}
 	for _, v := range envVars {
 		if err := viper.BindEnv(v); err != nil {
 			log.Printf("Error binding env variable %s: %v", v, err)
@@ -97,16 +92,6 @@ func bindEnvVariables() error {
 		}
 	}
 	return nil
-}
-
-func loadConfigFromFile(configFilePath string) error {
-	viper.SetConfigFile(configFilePath)
-	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("Failed to read config from file: %v", err)
-		return err
-	}
-	log.Printf("Loaded configuration from %s", configFilePath)
-	return unmarshalConfig()
 }
 
 func loadConfigFromConsul(consulURL, consulPath string) error {
