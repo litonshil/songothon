@@ -31,6 +31,12 @@ class ApiClient {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+
+          final orgSlug = await storageService.getCurrentOrgSlug();
+          if (orgSlug != null && orgSlug.isNotEmpty) {
+            options.headers['X-Org-Slug'] = orgSlug;
+          }
+
           return handler.next(options);
         },
         onError: (DioException error, handler) async {

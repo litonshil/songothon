@@ -19,242 +19,214 @@ func NewContributionRepository(db *DB) *ContributionRepository {
 	return &ContributionRepository{db: db}
 }
 
-func (r *ContributionRepository) CreatePeriod(ctx context.Context, p *domain.ContributionPeriod) (*domain.ContributionPeriod, error) {
-	query := `
-		INSERT INTO contribution_periods (title, frequency, amount_due, due_date, is_active)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, title, frequency, amount_due, due_date, is_active, created_at, updated_at
-	`
-	created := &domain.ContributionPeriod{}
-	err := r.db.Pool.QueryRow(ctx, query,
-		p.Title,
-		p.Frequency,
-		p.AmountDue,
-		p.DueDate,
-		p.IsActive,
-	).Scan(
-		&created.ID,
-		&created.Title,
-		&created.Frequency,
-		&created.AmountDue,
-		&created.DueDate,
-		&created.IsActive,
-		&created.CreatedAt,
-		&created.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create contribution period: %w", err)
-	}
-
-	return created, nil
-}
-
-func (r *ContributionRepository) GetPeriodByID(ctx context.Context, id uuid.UUID) (*domain.ContributionPeriod, error) {
-	query := `
-		SELECT id, title, frequency, amount_due, due_date, is_active, created_at, updated_at
-		FROM contribution_periods
-		WHERE id = $1
-	`
-	p := &domain.ContributionPeriod{}
-	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
-		&p.ID,
-		&p.Title,
-		&p.Frequency,
-		&p.AmountDue,
-		&p.DueDate,
-		&p.IsActive,
-		&p.CreatedAt,
-		&p.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get contribution period: %w", err)
-	}
-
-	return p, nil
-}
-
-func (r *ContributionRepository) GetActivePeriod(ctx context.Context) (*domain.ContributionPeriod, error) {
-	query := `
-		SELECT id, title, frequency, amount_due, due_date, is_active, created_at, updated_at
-		FROM contribution_periods
-		WHERE is_active = true
-		ORDER BY due_date DESC
+func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribution) error {
+	// Check for existing non-rejected TrxID in the same org
+	var existingID uuid.UUID
+	checkQuery := `
+		SELECT id FROM contributions 
+		WHERE org_id = $1 AND LOWER(trx_id) = LOWER($2) AND status != 'REJECTED' AND deleted_at IS NULL
 		LIMIT 1
 	`
-	p := &domain.ContributionPeriod{}
-	err := r.db.Pool.QueryRow(ctx, query).Scan(
-		&p.ID,
-		&p.Title,
-		&p.Frequency,
-		&p.AmountDue,
-		&p.DueDate,
-		&p.IsActive,
-		&p.CreatedAt,
-		&p.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get active period: %w", err)
+	err := r.db.Pool.QueryRow(ctx, checkQuery, c.OrgID, c.TrxID).Scan(&existingID)
+	if err == nil {
+		return fmt.Errorf("transaction ID '%s' has already been submitted for this organization", c.TrxID)
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("error verifying transaction ID uniqueness: %w", err)
 	}
 
-	return p, nil
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	if c.Status == "" {
+		c.Status = domain.ContributionStatusPending
+	}
+	if c.PaidAt.IsZero() {
+		c.PaidAt = time.Now()
+	}
+
+	query := `
+		INSERT INTO contributions (
+			id, org_id, user_id, type, amount, payment_method, trx_id, sender_account,
+			receipt_url, target_cycle, status, notes, paid_at, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8,
+			$9, $10, $11, $12, $13, NOW(), NOW()
+		)
+		RETURNING created_at, updated_at
+	`
+	return r.db.Pool.QueryRow(ctx, query,
+		c.ID, c.OrgID, c.UserID, c.Type, c.Amount, c.PaymentMethod, c.TrxID, c.SenderAccount,
+		c.ReceiptURL, c.TargetCycle, c.Status, c.Notes, c.PaidAt,
+	).Scan(&c.CreatedAt, &c.UpdatedAt)
 }
 
-func (r *ContributionRepository) ListPeriods(ctx context.Context, activeOnly bool) ([]domain.ContributionPeriod, error) {
+func (r *ContributionRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.ContributionDetail, error) {
 	query := `
-		SELECT id, title, frequency, amount_due, due_date, is_active, created_at, updated_at
-		FROM contribution_periods
+		SELECT 
+			c.id, c.org_id, c.user_id, c.type, c.amount, c.payment_method, c.trx_id, c.sender_account,
+			COALESCE(c.receipt_url, ''), c.target_cycle, c.status, c.rejection_reason, c.reviewed_by, c.reviewed_at,
+			c.paid_at, COALESCE(c.notes, ''), c.created_at, c.updated_at,
+			u.full_name, u.email, COALESCE(u.phone, '')
+		FROM contributions c
+		JOIN users u ON c.user_id = u.id
+		WHERE c.id = $1 AND c.deleted_at IS NULL
 	`
-	if activeOnly {
-		query += " WHERE is_active = true"
+	var cd domain.ContributionDetail
+	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
+		&cd.ID, &cd.OrgID, &cd.UserID, &cd.Type, &cd.Amount, &cd.PaymentMethod, &cd.TrxID, &cd.SenderAccount,
+		&cd.ReceiptURL, &cd.TargetCycle, &cd.Status, &cd.RejectionReason, &cd.ReviewedBy, &cd.ReviewedAt,
+		&cd.PaidAt, &cd.Notes, &cd.CreatedAt, &cd.UpdatedAt,
+		&cd.MemberName, &cd.MemberEmail, &cd.MemberPhone,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
 	}
-	query += " ORDER BY due_date DESC"
-
-	rows, err := r.db.Pool.Query(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query periods: %w", err)
+		return nil, fmt.Errorf("failed to fetch contribution: %w", err)
+	}
+	return &cd, nil
+}
+
+func (r *ContributionRepository) ListPending(ctx context.Context, orgID uuid.UUID) ([]domain.ContributionDetail, error) {
+	query := `
+		SELECT 
+			c.id, c.org_id, c.user_id, c.type, c.amount, c.payment_method, c.trx_id, c.sender_account,
+			COALESCE(c.receipt_url, ''), c.target_cycle, c.status, c.rejection_reason, c.reviewed_by, c.reviewed_at,
+			c.paid_at, COALESCE(c.notes, ''), c.created_at, c.updated_at,
+			u.full_name, u.email, COALESCE(u.phone, '')
+		FROM contributions c
+		JOIN users u ON c.user_id = u.id
+		WHERE c.org_id = $1 AND c.status = 'PENDING' AND c.deleted_at IS NULL
+		ORDER BY c.paid_at ASC
+	`
+	rows, err := r.db.Pool.Query(ctx, query, orgID)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 
-	var periods []domain.ContributionPeriod
+	var list []domain.ContributionDetail
 	for rows.Next() {
-		var p domain.ContributionPeriod
-		if err := rows.Scan(
-			&p.ID,
-			&p.Title,
-			&p.Frequency,
-			&p.AmountDue,
-			&p.DueDate,
-			&p.IsActive,
-			&p.CreatedAt,
-			&p.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan period: %w", err)
+		var cd domain.ContributionDetail
+		err := rows.Scan(
+			&cd.ID, &cd.OrgID, &cd.UserID, &cd.Type, &cd.Amount, &cd.PaymentMethod, &cd.TrxID, &cd.SenderAccount,
+			&cd.ReceiptURL, &cd.TargetCycle, &cd.Status, &cd.RejectionReason, &cd.ReviewedBy, &cd.ReviewedAt,
+			&cd.PaidAt, &cd.Notes, &cd.CreatedAt, &cd.UpdatedAt,
+			&cd.MemberName, &cd.MemberEmail, &cd.MemberPhone,
+		)
+		if err != nil {
+			return nil, err
 		}
-		periods = append(periods, p)
+		list = append(list, cd)
 	}
-
-	return periods, nil
+	return list, nil
 }
 
-// SubmitDeposit handles member self-submission of a monthly deposit (Status: Pending)
-func (r *ContributionRepository) SubmitDeposit(ctx context.Context, c *domain.Contribution) (*domain.Contribution, error) {
+func (r *ContributionRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, cycle string, status string) ([]domain.ContributionDetail, error) {
 	query := `
-		INSERT INTO contributions (user_id, period_id, amount, payment_method, reference_no, status, recorded_by, paid_at, notes)
-		VALUES ($1, $2, $3, $4, $5, 'pending', NULL, $6, $7)
-		RETURNING id, user_id, period_id, amount, payment_method, reference_no, status, recorded_by, paid_at, notes, created_at, updated_at
+		SELECT 
+			c.id, c.org_id, c.user_id, c.type, c.amount, c.payment_method, c.trx_id, c.sender_account,
+			COALESCE(c.receipt_url, ''), c.target_cycle, c.status, c.rejection_reason, c.reviewed_by, c.reviewed_at,
+			c.paid_at, COALESCE(c.notes, ''), c.created_at, c.updated_at,
+			u.full_name, u.email, COALESCE(u.phone, '')
+		FROM contributions c
+		JOIN users u ON c.user_id = u.id
+		WHERE c.org_id = $1 AND c.deleted_at IS NULL
+		  AND ($2 = '' OR c.target_cycle = $2)
+		  AND ($3 = '' OR c.status = $3)
+		ORDER BY c.paid_at DESC
 	`
-	created := &domain.Contribution{}
-	err := r.db.Pool.QueryRow(ctx, query,
-		c.UserID,
-		c.PeriodID,
-		c.Amount,
-		c.PaymentMethod,
-		c.ReferenceNo,
-		c.PaidAt,
-		c.Notes,
-	).Scan(
-		&created.ID,
-		&created.UserID,
-		&created.PeriodID,
-		&created.Amount,
-		&created.PaymentMethod,
-		&created.ReferenceNo,
-		&created.Status,
-		&created.RecordedBy,
-		&created.PaidAt,
-		&created.Notes,
-		&created.CreatedAt,
-		&created.UpdatedAt,
-	)
+	rows, err := r.db.Pool.Query(ctx, query, orgID, cycle, status)
 	if err != nil {
-		return nil, fmt.Errorf("failed to submit deposit: %w", err)
+		return nil, err
 	}
+	defer rows.Close()
 
-	return created, nil
+	var list []domain.ContributionDetail
+	for rows.Next() {
+		var cd domain.ContributionDetail
+		err := rows.Scan(
+			&cd.ID, &cd.OrgID, &cd.UserID, &cd.Type, &cd.Amount, &cd.PaymentMethod, &cd.TrxID, &cd.SenderAccount,
+			&cd.ReceiptURL, &cd.TargetCycle, &cd.Status, &cd.RejectionReason, &cd.ReviewedBy, &cd.ReviewedAt,
+			&cd.PaidAt, &cd.Notes, &cd.CreatedAt, &cd.UpdatedAt,
+			&cd.MemberName, &cd.MemberEmail, &cd.MemberPhone,
+		)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, cd)
+	}
+	return list, nil
 }
 
-// ApproveDeposit approves a pending deposit, marks as paid, and posts into transactions ledger
-func (r *ContributionRepository) ApproveDeposit(ctx context.Context, contributionID, adminID uuid.UUID) (*domain.Contribution, error) {
+func (r *ContributionRepository) ListByUser(ctx context.Context, orgID, userID uuid.UUID) ([]domain.Contribution, error) {
+	query := `
+		SELECT 
+			id, org_id, user_id, type, amount, payment_method, trx_id, sender_account,
+			COALESCE(receipt_url, ''), target_cycle, status, rejection_reason, reviewed_by, reviewed_at,
+			paid_at, COALESCE(notes, ''), created_at, updated_at
+		FROM contributions
+		WHERE org_id = $1 AND user_id = $2 AND deleted_at IS NULL
+		ORDER BY paid_at DESC
+	`
+	rows, err := r.db.Pool.Query(ctx, query, orgID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Contribution
+	for rows.Next() {
+		var c domain.Contribution
+		err := rows.Scan(
+			&c.ID, &c.OrgID, &c.UserID, &c.Type, &c.Amount, &c.PaymentMethod, &c.TrxID, &c.SenderAccount,
+			&c.ReceiptURL, &c.TargetCycle, &c.Status, &c.RejectionReason, &c.ReviewedBy, &c.ReviewedAt,
+			&c.PaidAt, &c.Notes, &c.CreatedAt, &c.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, nil
+}
+
+func (r *ContributionRepository) ApproveDeposit(ctx context.Context, id, reviewerID uuid.UUID) (*domain.ContributionDetail, error) {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	// Fetch existing contribution
-	var c domain.Contribution
-	checkQuery := `
-		SELECT c.id, c.user_id, u.full_name, c.amount, c.status
-		FROM contributions c
-		JOIN users u ON c.user_id = u.id
-		WHERE c.id = $1
-		FOR UPDATE
-	`
-	err = tx.QueryRow(ctx, checkQuery, contributionID).Scan(
-		&c.ID,
-		&c.UserID,
-		&c.MemberName,
-		&c.Amount,
-		&c.Status,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("deposit record not found")
-		}
-		return nil, fmt.Errorf("failed to find deposit: %w", err)
-	}
-
-	if c.Status == domain.ContributionPaid {
-		return nil, errors.New("deposit is already approved and paid")
-	}
-
-	// Update contribution status to paid
+	// Update contribution status
 	updateQuery := `
 		UPDATE contributions
-		SET status = 'paid', recorded_by = $1, paid_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $2
-		RETURNING id, user_id, period_id, amount, payment_method, reference_no, status, recorded_by, paid_at, notes, created_at, updated_at
+		SET status = 'APPROVED',
+		    rejection_reason = NULL,
+		    reviewed_by = $2,
+		    reviewed_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1 AND status = 'PENDING' AND deleted_at IS NULL
+		RETURNING org_id, user_id, amount, target_cycle
 	`
-	updated := &domain.Contribution{}
-	err = tx.QueryRow(ctx, updateQuery, adminID, contributionID).Scan(
-		&updated.ID,
-		&updated.UserID,
-		&updated.PeriodID,
-		&updated.Amount,
-		&updated.PaymentMethod,
-		&updated.ReferenceNo,
-		&updated.Status,
-		&updated.RecordedBy,
-		&updated.PaidAt,
-		&updated.Notes,
-		&updated.CreatedAt,
-		&updated.UpdatedAt,
-	)
+	var orgID, memberID uuid.UUID
+	var amount float64
+	var targetCycle string
+	err = tx.QueryRow(ctx, updateQuery, id, reviewerID).Scan(&orgID, &memberID, &amount, &targetCycle)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("deposit not found or already reviewed")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to approve deposit: %w", err)
 	}
 
-	// Post into transactions ledger
-	insertTxQuery := `
-		INSERT INTO transactions (type, amount, flow, reference_table, reference_id, recorded_by, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	// Insert into financial ledger transactions
+	ledgerQuery := `
+		INSERT INTO transactions (id, org_id, type, amount, flow, reference_table, reference_id, recorded_by, description, created_at)
+		VALUES ($1, $2, 'deposit', $3, 'inflow', 'contributions', $4, $5, $6, NOW())
 	`
-	desc := fmt.Sprintf("Approved member deposit of %.2f from %s", updated.Amount, c.MemberName)
-	_, err = tx.Exec(ctx, insertTxQuery,
-		domain.TxDeposit,
-		updated.Amount,
-		domain.FlowInflow,
-		"contributions",
-		updated.ID,
-		adminID,
-		desc,
-	)
+	desc := fmt.Sprintf("Approved member deposit for cycle %s", targetCycle)
+	_, err = tx.Exec(ctx, ledgerQuery, uuid.New(), orgID, amount, id, reviewerID, desc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to record ledger transaction: %w", err)
 	}
@@ -263,410 +235,139 @@ func (r *ContributionRepository) ApproveDeposit(ctx context.Context, contributio
 		return nil, fmt.Errorf("failed to commit approval transaction: %w", err)
 	}
 
-	return updated, nil
+	return r.GetByID(ctx, id)
 }
 
-// RejectDeposit marks a pending deposit as rejected with an optional reason
-func (r *ContributionRepository) RejectDeposit(ctx context.Context, contributionID, adminID uuid.UUID, reason string) error {
+func (r *ContributionRepository) RejectDeposit(ctx context.Context, id, reviewerID uuid.UUID, reason string) (*domain.ContributionDetail, error) {
 	query := `
 		UPDATE contributions
-		SET status = 'rejected', recorded_by = $1, notes = COALESCE(notes || ' | ', '') || $2, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $3 AND status = 'pending'
+		SET status = 'REJECTED',
+		    rejection_reason = $2,
+		    reviewed_by = $3,
+		    reviewed_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1 AND status = 'PENDING' AND deleted_at IS NULL
 	`
-	res, err := r.db.Pool.Exec(ctx, query, adminID, "Rejected: "+reason, contributionID)
+	res, err := r.db.Pool.Exec(ctx, query, id, reason, reviewerID)
 	if err != nil {
-		return fmt.Errorf("failed to reject deposit: %w", err)
+		return nil, fmt.Errorf("failed to reject deposit: %w", err)
 	}
 	if res.RowsAffected() == 0 {
-		return errors.New("deposit not found or not in pending status")
+		return nil, fmt.Errorf("deposit not found or already reviewed")
 	}
 
-	return nil
+	return r.GetByID(ctx, id)
 }
 
-// RecordDeposit directly records an approved deposit by admin
-func (r *ContributionRepository) RecordDeposit(ctx context.Context, c *domain.Contribution) (*domain.Contribution, error) {
-	tx, err := r.db.Pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	insertContributionQuery := `
-		INSERT INTO contributions (user_id, period_id, amount, payment_method, reference_no, status, recorded_by, paid_at, notes)
-		VALUES ($1, $2, $3, $4, $5, 'paid', $6, $7, $8)
-		RETURNING id, user_id, period_id, amount, payment_method, reference_no, status, recorded_by, paid_at, notes, created_at, updated_at
-	`
-	created := &domain.Contribution{}
-	err = tx.QueryRow(ctx, insertContributionQuery,
-		c.UserID,
-		c.PeriodID,
-		c.Amount,
-		c.PaymentMethod,
-		c.ReferenceNo,
-		c.RecordedBy,
-		c.PaidAt,
-		c.Notes,
-	).Scan(
-		&created.ID,
-		&created.UserID,
-		&created.PeriodID,
-		&created.Amount,
-		&created.PaymentMethod,
-		&created.ReferenceNo,
-		&created.Status,
-		&created.RecordedBy,
-		&created.PaidAt,
-		&created.Notes,
-		&created.CreatedAt,
-		&created.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert contribution: %w", err)
-	}
-
-	// Ledger record
-	insertTxQuery := `
-		INSERT INTO transactions (type, amount, flow, reference_table, reference_id, recorded_by, description)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
-	desc := fmt.Sprintf("Admin recorded deposit of %.2f", c.Amount)
-	_, err = tx.Exec(ctx, insertTxQuery,
-		domain.TxDeposit,
-		c.Amount,
-		domain.FlowInflow,
-		"contributions",
-		created.ID,
-		c.RecordedBy,
-		desc,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to record ledger transaction: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("failed to commit deposit transaction: %w", err)
-	}
-
-	return created, nil
-}
-
-// ListMonthlyDeposits returns member deposits grouped by a specific month/period
-func (r *ContributionRepository) ListMonthlyDeposits(ctx context.Context, periodID uuid.UUID) (*domain.MonthlyDepositReport, error) {
-	period, err := r.GetPeriodByID(ctx, periodID)
-	if err != nil {
-		return nil, err
-	}
-	if period == nil {
-		return nil, errors.New("contribution period not found")
-	}
-
+func (r *ContributionRepository) GetUserCumulativeDeposits(ctx context.Context, orgID, userID uuid.UUID) (float64, error) {
 	query := `
-		SELECT c.id, c.user_id, u.full_name, u.email, c.period_id, COALESCE(p.title, 'General Savings'),
-		       c.amount, c.payment_method, COALESCE(c.reference_no, ''), c.status,
-		       c.recorded_by, COALESCE(rec.full_name, 'Pending Approval'), c.paid_at, COALESCE(c.notes, ''),
-		       c.created_at, c.updated_at
-		FROM contributions c
-		JOIN users u ON c.user_id = u.id
-		LEFT JOIN contribution_periods p ON c.period_id = p.id
-		LEFT JOIN users rec ON c.recorded_by = rec.id
-		WHERE c.period_id = $1
-		ORDER BY c.status ASC, c.paid_at DESC
-	`
-	rows, err := r.db.Pool.Query(ctx, query, periodID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query monthly deposits: %w", err)
-	}
-	defer rows.Close()
-
-	var deposits []domain.Contribution
-	var totalCollected float64
-	var totalPending float64
-	var paidCount int
-	var pendingCount int
-
-	for rows.Next() {
-		var c domain.Contribution
-		if err := rows.Scan(
-			&c.ID,
-			&c.UserID,
-			&c.MemberName,
-			&c.MemberEmail,
-			&c.PeriodID,
-			&c.PeriodTitle,
-			&c.Amount,
-			&c.PaymentMethod,
-			&c.ReferenceNo,
-			&c.Status,
-			&c.RecordedBy,
-			&c.RecorderName,
-			&c.PaidAt,
-			&c.Notes,
-			&c.CreatedAt,
-			&c.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan deposit: %w", err)
-		}
-
-		if c.Status == domain.ContributionPaid {
-			totalCollected += c.Amount
-			paidCount++
-		} else if c.Status == domain.ContributionPending {
-			totalPending += c.Amount
-			pendingCount++
-		}
-
-		deposits = append(deposits, c)
-	}
-
-	return &domain.MonthlyDepositReport{
-		PeriodID:       period.ID,
-		PeriodTitle:    period.Title,
-		AmountDue:      period.AmountDue,
-		DueDate:        period.DueDate,
-		TotalCollected: totalCollected,
-		TotalPending:   totalPending,
-		PaidCount:      paidCount,
-		PendingCount:   pendingCount,
-		Deposits:       deposits,
-	}, nil
-}
-
-// ListAllMonthlyReports returns all monthly cycles with their member deposits
-func (r *ContributionRepository) ListAllMonthlyReports(ctx context.Context) ([]domain.MonthlyDepositReport, error) {
-	periods, err := r.ListPeriods(ctx, false)
-	if err != nil {
-		return nil, err
-	}
-
-	var reports []domain.MonthlyDepositReport
-	for _, p := range periods {
-		report, err := r.ListMonthlyDeposits(ctx, p.ID)
-		if err == nil && report != nil {
-			reports = append(reports, *report)
-		}
-	}
-
-	return reports, nil
-}
-
-// ListPendingApprovals lists deposits awaiting admin approval
-func (r *ContributionRepository) ListPendingApprovals(ctx context.Context) ([]domain.Contribution, error) {
-	query := `
-		SELECT c.id, c.user_id, u.full_name, u.email, c.period_id, COALESCE(p.title, 'General Savings'),
-		       c.amount, c.payment_method, COALESCE(c.reference_no, ''), c.status,
-		       c.recorded_by, 'Pending Admin', c.paid_at, COALESCE(c.notes, ''),
-		       c.created_at, c.updated_at
-		FROM contributions c
-		JOIN users u ON c.user_id = u.id
-		LEFT JOIN contribution_periods p ON c.period_id = p.id
-		WHERE c.status = 'pending'
-		ORDER BY c.created_at ASC
-	`
-	rows, err := r.db.Pool.Query(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query pending deposits: %w", err)
-	}
-	defer rows.Close()
-
-	var list []domain.Contribution
-	for rows.Next() {
-		var c domain.Contribution
-		if err := rows.Scan(
-			&c.ID,
-			&c.UserID,
-			&c.MemberName,
-			&c.MemberEmail,
-			&c.PeriodID,
-			&c.PeriodTitle,
-			&c.Amount,
-			&c.PaymentMethod,
-			&c.ReferenceNo,
-			&c.Status,
-			&c.RecordedBy,
-			&c.RecorderName,
-			&c.PaidAt,
-			&c.Notes,
-			&c.CreatedAt,
-			&c.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan pending deposit: %w", err)
-		}
-		list = append(list, c)
-	}
-
-	return list, nil
-}
-
-func (r *ContributionRepository) ListUserContributions(ctx context.Context, userID uuid.UUID) ([]domain.Contribution, error) {
-	query := `
-		SELECT c.id, c.user_id, u.full_name, u.email, c.period_id, COALESCE(p.title, 'General Savings'),
-		       c.amount, c.payment_method, COALESCE(c.reference_no, ''), c.status,
-		       c.recorded_by, COALESCE(rec.full_name, 'System'), c.paid_at, COALESCE(c.notes, ''),
-		       c.created_at, c.updated_at
-		FROM contributions c
-		JOIN users u ON c.user_id = u.id
-		LEFT JOIN contribution_periods p ON c.period_id = p.id
-		LEFT JOIN users rec ON c.recorded_by = rec.id
-		WHERE c.user_id = $1
-		ORDER BY c.paid_at DESC
-	`
-	rows, err := r.db.Pool.Query(ctx, query, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query user contributions: %w", err)
-	}
-	defer rows.Close()
-
-	var list []domain.Contribution
-	for rows.Next() {
-		var c domain.Contribution
-		if err := rows.Scan(
-			&c.ID,
-			&c.UserID,
-			&c.MemberName,
-			&c.MemberEmail,
-			&c.PeriodID,
-			&c.PeriodTitle,
-			&c.Amount,
-			&c.PaymentMethod,
-			&c.ReferenceNo,
-			&c.Status,
-			&c.RecordedBy,
-			&c.RecorderName,
-			&c.PaidAt,
-			&c.Notes,
-			&c.CreatedAt,
-			&c.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan user contribution: %w", err)
-		}
-		list = append(list, c)
-	}
-
-	return list, nil
-}
-
-func (r *ContributionRepository) ListAllContributions(ctx context.Context, limit, offset int) ([]domain.Contribution, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	query := `
-		SELECT c.id, c.user_id, u.full_name, u.email, c.period_id, COALESCE(p.title, 'General Savings'),
-		       c.amount, c.payment_method, COALESCE(c.reference_no, ''), c.status,
-		       c.recorded_by, COALESCE(rec.full_name, 'System'), c.paid_at, COALESCE(c.notes, ''),
-		       c.created_at, c.updated_at
-		FROM contributions c
-		JOIN users u ON c.user_id = u.id
-		LEFT JOIN contribution_periods p ON c.period_id = p.id
-		LEFT JOIN users rec ON c.recorded_by = rec.id
-		ORDER BY c.paid_at DESC
-		LIMIT $1 OFFSET $2
-	`
-	rows, err := r.db.Pool.Query(ctx, query, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query all contributions: %w", err)
-	}
-	defer rows.Close()
-
-	var list []domain.Contribution
-	for rows.Next() {
-		var c domain.Contribution
-		if err := rows.Scan(
-			&c.ID,
-			&c.UserID,
-			&c.MemberName,
-			&c.MemberEmail,
-			&c.PeriodID,
-			&c.PeriodTitle,
-			&c.Amount,
-			&c.PaymentMethod,
-			&c.ReferenceNo,
-			&c.Status,
-			&c.RecordedBy,
-			&c.RecorderName,
-			&c.PaidAt,
-			&c.Notes,
-			&c.CreatedAt,
-			&c.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan contribution: %w", err)
-		}
-		list = append(list, c)
-	}
-
-	return list, nil
-}
-
-func (r *ContributionRepository) GetUserFinancialSummary(ctx context.Context, userID uuid.UUID) (*domain.MemberFinancialSummary, error) {
-	userQuery := `SELECT full_name, email FROM users WHERE id = $1`
-	var fullName, email string
-	err := r.db.Pool.QueryRow(ctx, userQuery, userID).Scan(&fullName, &email)
-	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
-	}
-
-	// Total contributed by user (only paid counts)
-	contributedQuery := `
-		SELECT COALESCE(SUM(amount), 0.00)
+		SELECT COALESCE(SUM(amount), 0.0)
 		FROM contributions
-		WHERE user_id = $1 AND status = 'paid'
+		WHERE org_id = $1 AND user_id = $2 AND status = 'APPROVED' AND deleted_at IS NULL
 	`
-	var totalContributed float64
-	err = r.db.Pool.QueryRow(ctx, contributedQuery, userID).Scan(&totalContributed)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query total contributed: %w", err)
-	}
+	var total float64
+	err := r.db.Pool.QueryRow(ctx, query, orgID, userID).Scan(&total)
+	return total, err
+}
 
-	// Total active/past periods required sum vs paid count
-	periodSummaryQuery := `
-		SELECT COUNT(*), COALESCE(SUM(amount_due), 0.00)
-		FROM contribution_periods
-		WHERE due_date <= $1
+func (r *ContributionRepository) IsCyclePaid(ctx context.Context, orgID, userID uuid.UUID, cycle string) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM contributions
+			WHERE org_id = $1 AND user_id = $2 AND target_cycle = $3 AND status = 'APPROVED' AND deleted_at IS NULL
+		)
 	`
-	var totalCycles int
-	var totalObligation float64
-	err = r.db.Pool.QueryRow(ctx, periodSummaryQuery, time.Now().AddDate(0, 0, 1)).Scan(&totalCycles, &totalObligation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query period obligations: %w", err)
-	}
+	var paid bool
+	err := r.db.Pool.QueryRow(ctx, query, orgID, userID, cycle).Scan(&paid)
+	return paid, err
+}
 
-	// Paid periods count
-	paidCyclesQuery := `
-		SELECT COUNT(DISTINCT period_id)
+func (r *ContributionRepository) GetVaultBalance(ctx context.Context, orgID uuid.UUID) (float64, error) {
+	query := `
+		SELECT COALESCE(
+			SUM(CASE WHEN flow = 'inflow' THEN amount ELSE -amount END),
+			0.0
+		)
+		FROM transactions
+		WHERE org_id = $1
+	`
+	var balance float64
+	err := r.db.Pool.QueryRow(ctx, query, orgID).Scan(&balance)
+	return balance, err
+}
+
+func (r *ContributionRepository) GetCycleStats(ctx context.Context, orgID uuid.UUID, cycle string) (expected, collected, rate float64, err error) {
+	// Total Expected for Cycle = SUM(m.shares_count * sc.base_price_per_share)
+	expectedQuery := `
+		SELECT COALESCE(SUM(m.shares_count * sc.base_price_per_share), 0.0)
+		FROM organization_members m
+		CROSS JOIN LATERAL (
+			SELECT base_price_per_share 
+			FROM share_configurations 
+			WHERE org_id = $1 AND is_active = true 
+			ORDER BY created_at DESC LIMIT 1
+		) sc
+		WHERE m.org_id = $1 AND m.status = 'active' AND m.deleted_at IS NULL
+	`
+	_ = r.db.Pool.QueryRow(ctx, expectedQuery, orgID).Scan(&expected)
+
+	// Total Collected for Cycle = SUM(amount) of APPROVED contributions for this cycle
+	collectedQuery := `
+		SELECT COALESCE(SUM(amount), 0.0)
 		FROM contributions
-		WHERE user_id = $1 AND status = 'paid' AND period_id IS NOT NULL
+		WHERE org_id = $1 AND target_cycle = $2 AND status = 'APPROVED' AND deleted_at IS NULL
 	`
-	var paidCycles int
-	_ = r.db.Pool.QueryRow(ctx, paidCyclesQuery, userID).Scan(&paidCycles)
+	_ = r.db.Pool.QueryRow(ctx, collectedQuery, orgID, cycle).Scan(&collected)
 
-	// Pending periods count
-	pendingCyclesQuery := `
-		SELECT COUNT(DISTINCT period_id)
+	if expected > 0 {
+		rate = (collected / expected) * 100.0
+	} else if collected > 0 {
+		rate = 100.0
+	}
+	return expected, collected, rate, nil
+}
+
+func (r *ContributionRepository) GetOrgTotalDeposits(ctx context.Context, orgID uuid.UUID) (float64, error) {
+	query := `SELECT COALESCE(SUM(amount), 0.0) FROM contributions WHERE org_id = $1 AND status = 'APPROVED' AND deleted_at IS NULL`
+	var total float64
+	err := r.db.Pool.QueryRow(ctx, query, orgID).Scan(&total)
+	return total, err
+}
+
+func (r *ContributionRepository) GetMemberCycleTotals(ctx context.Context, orgID, userID uuid.UUID, cycle string) (approved, pending float64, err error) {
+	query := `
+		SELECT
+			COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN amount ELSE 0 END), 0.0),
+			COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0.0)
 		FROM contributions
-		WHERE user_id = $1 AND status = 'pending' AND period_id IS NOT NULL
+		WHERE org_id = $1 AND user_id = $2 AND target_cycle = $3 AND deleted_at IS NULL
 	`
-	var pendingCycles int
-	_ = r.db.Pool.QueryRow(ctx, pendingCyclesQuery, userID).Scan(&pendingCycles)
+	err = r.db.Pool.QueryRow(ctx, query, orgID, userID, cycle).Scan(&approved, &pending)
+	return approved, pending, err
+}
 
-	pendingDues := totalObligation - totalContributed
-	if pendingDues < 0 {
-		pendingDues = 0
-	}
-
-	recentContributions, err := r.ListUserContributions(ctx, userID)
+func (r *ContributionRepository) GetCurrentCycleStatus(ctx context.Context, orgID, userID uuid.UUID, cycle string) (string, error) {
+	approved, pending, err := r.GetMemberCycleTotals(ctx, orgID, userID, cycle)
 	if err != nil {
-		recentContributions = []domain.Contribution{}
+		return "Unpaid", err
 	}
+	if approved > 0 {
+		return "Paid", nil
+	}
+	if pending > 0 {
+		return "Pending", nil
+	}
+	return "Unpaid", nil
+}
 
-	return &domain.MemberFinancialSummary{
-		UserID:            userID,
-		FullName:          fullName,
-		Email:             email,
-		TotalContributed:  totalContributed,
-		PendingDues:       pendingDues,
-		TotalCycles:       totalCycles,
-		PaidCycles:        paidCycles,
-		PendingCycles:     pendingCycles,
-		ContributionsList: recentContributions,
-	}, nil
+func (r *ContributionRepository) GetMemberTargetTotals(ctx context.Context, orgID, userID uuid.UUID, contributionType domain.ContributionType, target string) (approved, pending float64, err error) {
+	query := `
+		SELECT
+			COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN amount ELSE 0 END), 0.0),
+			COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0.0)
+		FROM contributions
+		WHERE org_id = $1 AND user_id = $2 AND type = $3 AND target_cycle = $4 AND deleted_at IS NULL
+	`
+	err = r.db.Pool.QueryRow(ctx, query, orgID, userID, contributionType, target).Scan(&approved, &pending)
+	return approved, pending, err
 }

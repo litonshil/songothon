@@ -25,35 +25,14 @@ const (
 )
 
 type Transaction struct {
-	ID             uuid.UUID       `json:"id"`
-	Type           TransactionType `json:"type"`
-	Amount         float64         `json:"amount"`
-	Flow           FlowType        `json:"flow"`
-	ReferenceTable string          `json:"reference_table,omitempty"`
-	ReferenceID    *uuid.UUID      `json:"reference_id,omitempty"`
-	RecordedBy     *uuid.UUID      `json:"recorded_by,omitempty"`
-	Description    string          `json:"description,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
-}
-
-type PoolMetrics struct {
-	TotalFundsCollected float64 `json:"total_funds_collected"` // Sum of member deposits
-	TotalInvested       float64 `json:"total_invested"`        // Sum of active investments
-	TotalReturns        float64 `json:"total_returns"`         // Realized returns/dividends
-	AvailableLiquidity  float64 `json:"available_liquidity"`   // Collected + Returns - Invested - Expenses
-	PortfolioValuation  float64 `json:"portfolio_valuation"`   // Current portfolio market value
-	ActiveMembersCount  int     `json:"active_members_count"`  // Count of active users
-	InvestmentsCount    int     `json:"investments_count"`     // Count of active investments
-}
-
-type FinancialSummaryReport struct {
-	Metrics       PoolMetrics    `json:"metrics"`
-	RecentLedger  []Transaction  `json:"recent_ledger"`
-	TopSectorList []SectorMetric `json:"sector_breakdown"`
-}
-
-type SectorMetric struct {
-	Sector     string  `json:"sector"`
-	TotalAlloc float64 `json:"total_allocated"`
-	Percentage float64 `json:"percentage"`
+	ID             uuid.UUID       `json:"id" db:"id"`
+	OrgID          uuid.UUID       `json:"org_id" db:"org_id"`
+	Type           TransactionType `json:"type" db:"type"`
+	Amount         float64         `json:"amount" db:"amount"`
+	Flow           FlowType        `json:"flow" db:"flow"`
+	ReferenceTable string          `json:"reference_table,omitempty" db:"reference_table"`
+	ReferenceID    *uuid.UUID      `json:"reference_id,omitempty" db:"reference_id"`
+	RecordedBy     *uuid.UUID      `json:"recorded_by,omitempty" db:"recorded_by"`
+	Description    string          `json:"description,omitempty" db:"description"`
+	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 }

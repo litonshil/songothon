@@ -2,6 +2,7 @@ package handler
 
 import (
 	"github.com/labstack/echo/v4"
+	"songothon/internal/middleware"
 	"songothon/internal/service"
 	"songothon/pkg/response"
 )
@@ -14,22 +15,32 @@ func NewReportHandler(reportService *service.ReportService) *ReportHandler {
 	return &ReportHandler{reportService: reportService}
 }
 
-// GetOverview returns aggregate pool statistics (Read-only for all members & admins)
-func (h *ReportHandler) GetOverview(c echo.Context) error {
-	overview, err := h.reportService.GetPoolOverview(c.Request().Context())
+func (h *ReportHandler) GetMemberDashboard(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	member := middleware.GetCurrentMember(c)
+
+	if org == nil || member == nil {
+		return response.Forbidden(c, "Invalid organization member context")
+	}
+
+	data, err := h.reportService.GetMemberDashboard(c.Request().Context(), org, member)
 	if err != nil {
 		return response.InternalError(c, err.Error())
 	}
 
-	return response.Success(c, "Pool overview retrieved successfully", overview)
+	return response.Success(c, "Member dashboard metrics retrieved", data)
 }
 
-// GetFinancialSummary returns detailed organization audit and financial breakdown (Admin only)
-func (h *ReportHandler) GetFinancialSummary(c echo.Context) error {
-	summary, err := h.reportService.GetFinancialSummary(c.Request().Context())
+func (h *ReportHandler) GetAdminDashboard(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	if org == nil {
+		return response.Forbidden(c, "Invalid organization context")
+	}
+
+	data, err := h.reportService.GetAdminDashboard(c.Request().Context(), org)
 	if err != nil {
 		return response.InternalError(c, err.Error())
 	}
 
-	return response.Success(c, "Financial summary report retrieved successfully", summary)
+	return response.Success(c, "Admin dashboard metrics retrieved", data)
 }

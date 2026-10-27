@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"songothon/internal/domain"
@@ -12,193 +12,174 @@ import (
 )
 
 type ContributionService struct {
-	contribRepo *postgres.ContributionRepository
-	userRepo    *postgres.UserRepository
+	contribRepo  *postgres.ContributionRepository
+	orgRepo      *postgres.OrgRepository
+	auditRepo    *postgres.AuditRepository
+	notifService *NotificationService
 }
 
-func NewContributionService(contribRepo *postgres.ContributionRepository, userRepo *postgres.UserRepository) *ContributionService {
+func NewContributionService(
+	contribRepo *postgres.ContributionRepository,
+	orgRepo *postgres.OrgRepository,
+	auditRepo *postgres.AuditRepository,
+	notifService *NotificationService,
+) *ContributionService {
 	return &ContributionService{
-		contribRepo: contribRepo,
-		userRepo:    userRepo,
+		contribRepo:  contribRepo,
+		orgRepo:      orgRepo,
+		auditRepo:    auditRepo,
+		notifService: notifService,
 	}
 }
 
-func (s *ContributionService) CreatePeriod(ctx context.Context, req *domain.CreatePeriodRequest) (*domain.ContributionPeriod, error) {
-	if req.Title == "" {
-		return nil, errors.New("period title is required")
-	}
-	if req.AmountDue <= 0 {
-		return nil, errors.New("amount due must be greater than 0")
-	}
-
-	dueDate, err := time.Parse("2006-01-02", req.DueDate)
-	if err != nil {
-		return nil, errors.New("invalid due_date format, must be YYYY-MM-DD")
-	}
-
-	period := &domain.ContributionPeriod{
-		Title:     req.Title,
-		Frequency: req.Frequency,
-		AmountDue: req.AmountDue,
-		DueDate:   dueDate,
-		IsActive:  true,
-	}
-
-	return s.contribRepo.CreatePeriod(ctx, period)
-}
-
-func (s *ContributionService) ListPeriods(ctx context.Context, activeOnly bool) ([]domain.ContributionPeriod, error) {
-	return s.contribRepo.ListPeriods(ctx, activeOnly)
-}
-
-// SubmitDeposit allows a member to submit their monthly deposit (Status: Pending admin approval)
-func (s *ContributionService) SubmitDeposit(ctx context.Context, userID uuid.UUID, req *domain.SubmitDepositRequest) (*domain.Contribution, error) {
-	trxID := strings.TrimSpace(req.TransactionID)
+func (s *ContributionService) SubmitDeposit(
+	ctx context.Context,
+	orgID, userID uuid.UUID,
+	req *domain.SubmitDepositRequest,
+) (*domain.Contribution, error) {
+	trxID := strings.TrimSpace(req.TrxID)
 	if trxID == "" {
-		return nil, errors.New("transaction_id (TrxID from bKash/Nagad/Bank) is required")
+		return nil, errors.New("transaction ID (trx_id) is required")
 	}
 
-	method := strings.TrimSpace(strings.ToLower(req.PaymentMethod))
-	if method == "" {
-		method = "bkash"
+	senderAccount := strings.TrimSpace(req.SenderAccount)
+	if senderAccount == "" {
+		return nil, errors.New("sender account/phone number is required")
 	}
 
-	// Determine period and predefined amount
-	periodID := req.PeriodID
-	var predefinedAmount float64
-
-	if periodID == nil || *periodID == uuid.Nil {
-		activePeriod, err := s.contribRepo.GetActivePeriod(ctx)
-		if err != nil || activePeriod == nil {
-			// Fallback: list latest period
-			periods, _ := s.contribRepo.ListPeriods(ctx, false)
-			if len(periods) > 0 {
-				periodID = &periods[0].ID
-				predefinedAmount = periods[0].AmountDue
-			}
-		} else {
-			periodID = &activePeriod.ID
-			predefinedAmount = activePeriod.AmountDue
-		}
-	} else {
-		period, err := s.contribRepo.GetPeriodByID(ctx, *periodID)
-		if err == nil && period != nil {
-			predefinedAmount = period.AmountDue
-		}
+	if req.Amount <= 0 {
+		return nil, errors.New("deposit amount must be greater than zero")
 	}
 
-	amount := req.Amount
-	if amount <= 0 {
-		amount = predefinedAmount
-	}
-	if amount <= 0 {
-		amount = 200.00 // standard default predefined deposit
+	targetCycle := strings.TrimSpace(req.TargetCycle)
+	if targetCycle == "" {
+		return nil, errors.New("target deposit cycle is required")
 	}
 
 	contrib := &domain.Contribution{
+		OrgID:         orgID,
 		UserID:        userID,
-		PeriodID:      periodID,
-		Amount:        amount,
-		PaymentMethod: method,
-		ReferenceNo:   trxID,
-		Status:        domain.ContributionPending,
-		PaidAt:        time.Now(),
-		Notes:         req.Notes,
-	}
-
-	return s.contribRepo.SubmitDeposit(ctx, contrib)
-}
-
-// ApproveDeposit approves a pending deposit and posts it to ledger (Admin only)
-func (s *ContributionService) ApproveDeposit(ctx context.Context, contributionID, adminID uuid.UUID) (*domain.Contribution, error) {
-	return s.contribRepo.ApproveDeposit(ctx, contributionID, adminID)
-}
-
-// RejectDeposit rejects a pending deposit (Admin only)
-func (s *ContributionService) RejectDeposit(ctx context.Context, contributionID, adminID uuid.UUID, reason string) error {
-	return s.contribRepo.RejectDeposit(ctx, contributionID, adminID, reason)
-}
-
-// ListPendingApprovals lists all deposits awaiting admin approval
-func (s *ContributionService) ListPendingApprovals(ctx context.Context) ([]domain.Contribution, error) {
-	return s.contribRepo.ListPendingApprovals(ctx)
-}
-
-// GetMonthlyDepositReport returns month-wise deposits for a given period or latest active period
-func (s *ContributionService) GetMonthlyDepositReport(ctx context.Context, periodID *uuid.UUID) (*domain.MonthlyDepositReport, error) {
-	var targetPeriodID uuid.UUID
-	if periodID != nil && *periodID != uuid.Nil {
-		targetPeriodID = *periodID
-	} else {
-		activePeriod, err := s.contribRepo.GetActivePeriod(ctx)
-		if err != nil || activePeriod == nil {
-			periods, err := s.contribRepo.ListPeriods(ctx, false)
-			if err != nil || len(periods) == 0 {
-				return nil, errors.New("no contribution period found")
-			}
-			targetPeriodID = periods[0].ID
-		} else {
-			targetPeriodID = activePeriod.ID
-		}
-	}
-
-	return s.contribRepo.ListMonthlyDeposits(ctx, targetPeriodID)
-}
-
-// ListAllMonthlyReports returns all monthly cycles with their member deposits
-func (s *ContributionService) ListAllMonthlyReports(ctx context.Context) ([]domain.MonthlyDepositReport, error) {
-	return s.contribRepo.ListAllMonthlyReports(ctx)
-}
-
-func (s *ContributionService) RecordDeposit(ctx context.Context, adminID uuid.UUID, req *domain.RecordDepositRequest) (*domain.Contribution, error) {
-	if req.UserID == uuid.Nil {
-		return nil, errors.New("valid user_id is required")
-	}
-	if req.Amount <= 0 {
-		return nil, errors.New("amount must be greater than 0")
-	}
-	method := req.PaymentMethod
-	if method == "" {
-		method = "bank_transfer"
-	}
-
-	ref := req.TransactionID
-	if ref == "" {
-		ref = req.ReferenceNo
-	}
-
-	paidAt := time.Now()
-	if req.PaidAt != "" {
-		if parsed, err := time.Parse(time.RFC3339, req.PaidAt); err == nil {
-			paidAt = parsed
-		} else if parsedDate, errDate := time.Parse("2006-01-02", req.PaidAt); errDate == nil {
-			paidAt = parsedDate
-		}
-	}
-
-	contribution := &domain.Contribution{
-		UserID:        req.UserID,
-		PeriodID:      req.PeriodID,
+		Type:          req.Type,
 		Amount:        req.Amount,
-		PaymentMethod: method,
-		ReferenceNo:   ref,
-		Status:        domain.ContributionPaid,
-		RecordedBy:    &adminID,
-		PaidAt:        paidAt,
+		PaymentMethod: req.PaymentMethod,
+		TrxID:         trxID,
+		SenderAccount: senderAccount,
+		ReceiptURL:    req.ReceiptURL,
+		TargetCycle:   targetCycle,
+		Status:        domain.ContributionStatusPending,
 		Notes:         req.Notes,
 	}
 
-	return s.contribRepo.RecordDeposit(ctx, contribution)
+	if err := s.contribRepo.Create(ctx, contrib); err != nil {
+		return nil, err
+	}
+
+	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
+		OrgID:      &orgID,
+		UserID:     &userID,
+		Action:     "SUBMIT_DEPOSIT",
+		EntityType: "contributions",
+		EntityID:   &contrib.ID,
+		DetailsJSON: map[string]interface{}{
+			"amount":         req.Amount,
+			"trx_id":         trxID,
+			"target_cycle":   targetCycle,
+			"payment_method": req.PaymentMethod,
+		},
+	})
+
+	return contrib, nil
 }
 
-func (s *ContributionService) ListUserContributions(ctx context.Context, userID uuid.UUID) ([]domain.Contribution, error) {
-	return s.contribRepo.ListUserContributions(ctx, userID)
+func (s *ContributionService) ListPending(ctx context.Context, orgID uuid.UUID) ([]domain.ContributionDetail, error) {
+	return s.contribRepo.ListPending(ctx, orgID)
 }
 
-func (s *ContributionService) ListAllContributions(ctx context.Context, limit, offset int) ([]domain.Contribution, error) {
-	return s.contribRepo.ListAllContributions(ctx, limit, offset)
+func (s *ContributionService) ListContributions(ctx context.Context, orgID uuid.UUID, cycle, status string) ([]domain.ContributionDetail, error) {
+	return s.contribRepo.ListByOrg(ctx, orgID, cycle, status)
 }
 
-func (s *ContributionService) GetUserFinancialSummary(ctx context.Context, userID uuid.UUID) (*domain.MemberFinancialSummary, error) {
-	return s.contribRepo.GetUserFinancialSummary(ctx, userID)
+func (s *ContributionService) ListUserContributions(ctx context.Context, orgID, userID uuid.UUID) ([]domain.Contribution, error) {
+	return s.contribRepo.ListByUser(ctx, orgID, userID)
+}
+
+func (s *ContributionService) ApproveDeposit(ctx context.Context, orgID, contribID, reviewerID uuid.UUID) (*domain.ContributionDetail, error) {
+	approved, err := s.contribRepo.ApproveDeposit(ctx, contribID, reviewerID)
+	if err != nil {
+		return nil, err
+	}
+
+	org, _ := s.orgRepo.GetByID(ctx, orgID)
+	currency := "BDT"
+	if org != nil && org.Currency != "" {
+		currency = org.Currency
+	}
+
+	// Trigger automated FCM push notification to the member
+	title := "Deposit Approved! 🎉"
+	body := fmt.Sprintf("Your payment of %s %.2f for cycle %s has been verified and added to your savings.", currency, approved.Amount, approved.TargetCycle)
+	_ = s.notifService.SendToUser(ctx, &orgID, approved.UserID, title, body, "deposit_approved", map[string]string{
+		"org_id":          orgID.String(),
+		"contribution_id": approved.ID.String(),
+		"status":          "APPROVED",
+		"amount":          fmt.Sprintf("%.2f", approved.Amount),
+		"cycle":           approved.TargetCycle,
+	})
+
+	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
+		OrgID:      &orgID,
+		UserID:     &reviewerID,
+		Action:     "APPROVE_DEPOSIT",
+		EntityType: "contributions",
+		EntityID:   &contribID,
+		DetailsJSON: map[string]interface{}{
+			"amount":       approved.Amount,
+			"member_id":    approved.UserID.String(),
+			"target_cycle": approved.TargetCycle,
+		},
+	})
+
+	return approved, nil
+}
+
+func (s *ContributionService) RejectDeposit(
+	ctx context.Context,
+	orgID, contribID, reviewerID uuid.UUID,
+	req *domain.ReviewDepositRequest,
+) (*domain.ContributionDetail, error) {
+	reason := strings.TrimSpace(req.RejectionReason)
+	if reason == "" {
+		reason = "Transaction verification failed or TrxID could not be matched"
+	}
+
+	rejected, err := s.contribRepo.RejectDeposit(ctx, contribID, reviewerID, reason)
+	if err != nil {
+		return nil, err
+	}
+
+	// Trigger automated FCM push notification to the member
+	title := "Deposit Verification Notice ⚠️"
+	body := fmt.Sprintf("Your deposit of %.2f for cycle %s was rejected. Reason: %s", rejected.Amount, rejected.TargetCycle, reason)
+	_ = s.notifService.SendToUser(ctx, &orgID, rejected.UserID, title, body, "deposit_rejected", map[string]string{
+		"org_id":          orgID.String(),
+		"contribution_id": rejected.ID.String(),
+		"status":          "REJECTED",
+		"reason":          reason,
+		"cycle":           rejected.TargetCycle,
+	})
+
+	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
+		OrgID:      &orgID,
+		UserID:     &reviewerID,
+		Action:     "REJECT_DEPOSIT",
+		EntityType: "contributions",
+		EntityID:   &contribID,
+		DetailsJSON: map[string]interface{}{
+			"amount":    rejected.Amount,
+			"member_id": rejected.UserID.String(),
+			"reason":    reason,
+		},
+	})
+
+	return rejected, nil
 }

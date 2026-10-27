@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"strconv"
-
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"songothon/internal/domain"
@@ -19,212 +17,95 @@ func NewContributionHandler(contribService *service.ContributionService) *Contri
 	return &ContributionHandler{contribService: contribService}
 }
 
-// CreatePeriod creates a savings cycle / contribution deadline (Admin)
-func (h *ContributionHandler) CreatePeriod(c echo.Context) error {
-	var req domain.CreatePeriodRequest
-	if err := c.Bind(&req); err != nil {
-		return response.BadRequest(c, "Invalid request payload")
-	}
-
-	period, err := h.contribService.CreatePeriod(c.Request().Context(), &req)
-	if err != nil {
-		return response.BadRequest(c, err.Error())
-	}
-
-	return response.Created(c, "Contribution period created successfully", period)
-}
-
-// ListPeriods lists contribution cycles (All Authenticated)
-func (h *ContributionHandler) ListPeriods(c echo.Context) error {
-	activeOnly := c.QueryParam("active") == "true"
-	periods, err := h.contribService.ListPeriods(c.Request().Context(), activeOnly)
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "Periods retrieved successfully", periods)
-}
-
-// SubmitDeposit allows a member to submit their monthly deposit (Member)
 func (h *ContributionHandler) SubmitDeposit(c echo.Context) error {
-	userID, err := middleware.GetCurrentUserID(c)
-	if err != nil {
-		return response.Unauthorized(c, "Member session required")
-	}
+	org := middleware.GetCurrentOrg(c)
+	userID := middleware.GetUserID(c)
 
 	var req domain.SubmitDepositRequest
 	if err := c.Bind(&req); err != nil {
-		return response.BadRequest(c, "Invalid deposit payload")
+		return response.BadRequest(c, "Invalid deposit submission payload")
 	}
 
-	contrib, err := h.contribService.SubmitDeposit(c.Request().Context(), userID, &req)
+	contrib, err := h.contribService.SubmitDeposit(c.Request().Context(), org.ID, userID, &req)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
 	}
 
-	return response.Created(c, "Deposit entry submitted successfully. Awaiting admin approval.", contrib)
+	return response.Created(c, "Deposit submitted successfully and is pending admin verification", contrib)
 }
 
-// ApproveDeposit approves a pending member deposit (Admin only)
+func (h *ContributionHandler) ListMyHistory(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	userID := middleware.GetUserID(c)
+
+	list, err := h.contribService.ListUserContributions(c.Request().Context(), org.ID, userID)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, "Personal contribution history retrieved", list)
+}
+
+func (h *ContributionHandler) ListPending(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	pending, err := h.contribService.ListPending(c.Request().Context(), org.ID)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, "Pending verification queue retrieved", pending)
+}
+
+func (h *ContributionHandler) ListAll(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	cycle := c.QueryParam("cycle")
+	status := c.QueryParam("status")
+
+	list, err := h.contribService.ListContributions(c.Request().Context(), org.ID, cycle, status)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	return response.Success(c, "Contributions retrieved", list)
+}
+
 func (h *ContributionHandler) ApproveDeposit(c echo.Context) error {
-	adminID, err := middleware.GetCurrentUserID(c)
+	org := middleware.GetCurrentOrg(c)
+	reviewerID := middleware.GetUserID(c)
+
+	idStr := c.Param("id")
+	contribID, err := uuid.Parse(idStr)
 	if err != nil {
-		return response.Unauthorized(c, "Admin session required")
+		return response.BadRequest(c, "Invalid contribution ID format")
 	}
 
-	depositID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		return response.BadRequest(c, "Invalid deposit ID")
-	}
-
-	approved, err := h.contribService.ApproveDeposit(c.Request().Context(), depositID, adminID)
+	approved, err := h.contribService.ApproveDeposit(c.Request().Context(), org.ID, contribID, reviewerID)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
 	}
 
-	return response.Success(c, "Deposit approved and marked as paid in financial ledger", approved)
+	return response.Success(c, "Deposit approved successfully and recorded in vault ledger", approved)
 }
 
-// RejectDeposit rejects a pending member deposit (Admin only)
 func (h *ContributionHandler) RejectDeposit(c echo.Context) error {
-	adminID, err := middleware.GetCurrentUserID(c)
+	org := middleware.GetCurrentOrg(c)
+	reviewerID := middleware.GetUserID(c)
+
+	idStr := c.Param("id")
+	contribID, err := uuid.Parse(idStr)
 	if err != nil {
-		return response.Unauthorized(c, "Admin session required")
+		return response.BadRequest(c, "Invalid contribution ID format")
 	}
 
-	depositID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		return response.BadRequest(c, "Invalid deposit ID")
-	}
-
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	_ = c.Bind(&body)
-	if body.Reason == "" {
-		body.Reason = "Transaction ID could not be verified"
-	}
-
-	if err := h.contribService.RejectDeposit(c.Request().Context(), depositID, adminID, body.Reason); err != nil {
-		return response.BadRequest(c, err.Error())
-	}
-
-	return response.Success(c, "Deposit rejected", nil)
-}
-
-// ListPendingApprovals lists deposits awaiting admin approval (Admin only)
-func (h *ContributionHandler) ListPendingApprovals(c echo.Context) error {
-	pending, err := h.contribService.ListPendingApprovals(c.Request().Context())
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "Pending deposits retrieved successfully", pending)
-}
-
-// GetMonthlyReport returns deposits for a month/period (All Authenticated)
-func (h *ContributionHandler) GetMonthlyReport(c echo.Context) error {
-	var periodID *uuid.UUID
-	periodStr := c.QueryParam("period_id")
-	if periodStr != "" {
-		parsed, err := uuid.Parse(periodStr)
-		if err == nil {
-			periodID = &parsed
-		}
-	}
-
-	report, err := h.contribService.GetMonthlyDepositReport(c.Request().Context(), periodID)
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "Monthly deposit report retrieved successfully", report)
-}
-
-// ListAllMonthlyReports returns all monthly cycles and who paid (All Authenticated)
-func (h *ContributionHandler) ListAllMonthlyReports(c echo.Context) error {
-	reports, err := h.contribService.ListAllMonthlyReports(c.Request().Context())
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "All monthly reports retrieved successfully", reports)
-}
-
-// RecordDeposit records a member deposit payment directly (Admin)
-func (h *ContributionHandler) RecordDeposit(c echo.Context) error {
-	adminID, err := middleware.GetCurrentUserID(c)
-	if err != nil {
-		return response.Unauthorized(c, "Admin session required")
-	}
-
-	var req domain.RecordDepositRequest
+	var req domain.ReviewDepositRequest
 	if err := c.Bind(&req); err != nil {
-		return response.BadRequest(c, "Invalid request payload")
+		return response.BadRequest(c, "Invalid review payload")
 	}
 
-	contrib, err := h.contribService.RecordDeposit(c.Request().Context(), adminID, &req)
+	rejected, err := h.contribService.RejectDeposit(c.Request().Context(), org.ID, contribID, reviewerID, &req)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
 	}
 
-	return response.Created(c, "Deposit recorded successfully in ledger", contrib)
-}
-
-// ListAllContributions lists all pool deposits (Admin)
-func (h *ContributionHandler) ListAllContributions(c echo.Context) error {
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
-
-	list, err := h.contribService.ListAllContributions(c.Request().Context(), limit, offset)
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "Contributions retrieved successfully", list)
-}
-
-// GetMyHistory retrieves logged-in member's personal deposit history (Member)
-func (h *ContributionHandler) GetMyHistory(c echo.Context) error {
-	userID, err := middleware.GetCurrentUserID(c)
-	if err != nil {
-		return response.Unauthorized(c, "User authentication required")
-	}
-
-	history, err := h.contribService.ListUserContributions(c.Request().Context(), userID)
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "Deposit history retrieved successfully", history)
-}
-
-// GetMyDues retrieves logged-in member's pending dues and contribution statistics (Member)
-func (h *ContributionHandler) GetMyDues(c echo.Context) error {
-	userID, err := middleware.GetCurrentUserID(c)
-	if err != nil {
-		return response.Unauthorized(c, "User authentication required")
-	}
-
-	summary, err := h.contribService.GetUserFinancialSummary(c.Request().Context(), userID)
-	if err != nil {
-		return response.InternalError(c, err.Error())
-	}
-
-	return response.Success(c, "Personal financial summary retrieved successfully", summary)
-}
-
-// GetMemberFinancialSummary allows admin to inspect specific member's dues
-func (h *ContributionHandler) GetMemberFinancialSummary(c echo.Context) error {
-	targetID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		return response.BadRequest(c, "Invalid member ID format")
-	}
-
-	summary, err := h.contribService.GetUserFinancialSummary(c.Request().Context(), targetID)
-	if err != nil {
-		return response.NotFound(c, err.Error())
-	}
-
-	return response.Success(c, "Member dues summary retrieved successfully", summary)
+	return response.Success(c, "Deposit rejected", rejected)
 }

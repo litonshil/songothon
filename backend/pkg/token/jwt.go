@@ -10,9 +10,8 @@ import (
 )
 
 type JWTClaims struct {
-	UserID uuid.UUID   `json:"user_id"`
-	Email  string      `json:"email"`
-	Role   domain.Role `json:"role"`
+	UserID uuid.UUID `json:"user_id"`
+	Email  string    `json:"email"`
 	jwt.RegisteredClaims
 }
 
@@ -35,7 +34,6 @@ func (tm *TokenManager) GenerateToken(user *domain.User) (string, error) {
 	claims := JWTClaims{
 		UserID: user.ID,
 		Email:  user.Email,
-		Role:   user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(tm.tokenDuration)),
 			IssuedAt:  jwt.NewNumericDate(now),

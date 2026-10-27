@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/api/api_constants.dart';
 import '../../core/theme/app_theme.dart';
-import '../../state/auth/auth_cubit.dart';
-import '../../state/auth/auth_state.dart';
+import '../../features/auth/presentation/bloc/auth_cubit.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/bloc/auth_state.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -113,10 +115,10 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: BlocConsumer<AuthCubit, AuthState>(
         listener: (context, state) {
-          if (state is AuthFailure) {
+          if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.error),
+                content: Text(state.message),
                 backgroundColor: AppTheme.errorRed,
                 behavior: SnackBarBehavior.floating,
               ),
@@ -227,7 +229,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 24),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: isLoading
+                              ? null
+                              : () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                                  ),
+                          child: const Text('Forgot password?', style: TextStyle(fontSize: 12.5)),
+                        ),
+                      ),
 
                       // Sign In Button
                       ElevatedButton(
@@ -242,6 +254,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               )
                             : const Text('Sign In to Account'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                                ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryNavy,
+                          side: const BorderSide(color: AppTheme.borderLight),
+                        ),
+                        child: const Text('Create a new account'),
                       ),
                       const SizedBox(height: 24),
 

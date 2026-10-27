@@ -10,6 +10,8 @@ class SecureStorageService {
   static const String _keyUserRole = 'user_role';
   static const String _keyUserName = 'user_name';
   static const String _keyUserEmail = 'user_email';
+  static const String _keyCurrentOrgSlug = 'current_org_slug';
+  static const String _keyCurrentOrgId = 'current_org_id';
 
   Future<void> saveAuthSession({
     required String token,
@@ -21,6 +23,26 @@ class SecureStorageService {
     await _storage.write(key: _keyUserRole, value: role);
     await _storage.write(key: _keyUserName, value: name);
     await _storage.write(key: _keyUserEmail, value: email);
+  }
+
+  Future<void> saveCurrentOrgSlug(String slug) async {
+    await _storage.write(key: _keyCurrentOrgSlug, value: slug);
+  }
+
+  Future<void> saveUserRole(String role) async {
+    await _storage.write(key: _keyUserRole, value: role);
+  }
+
+  Future<String?> getCurrentOrgSlug() async {
+    return await _storage.read(key: _keyCurrentOrgSlug);
+  }
+
+  Future<void> saveCurrentOrgId(String id) async {
+    await _storage.write(key: _keyCurrentOrgId, value: id);
+  }
+
+  Future<String?> getCurrentOrgId() async {
+    return await _storage.read(key: _keyCurrentOrgId);
   }
 
   Future<String?> getToken() async {

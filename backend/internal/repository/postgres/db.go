@@ -51,7 +51,7 @@ func NewDB(ctx context.Context, databaseURL string) (*DB, error) {
 
 	// Auto-run schema migrations
 	if err := db.AutoMigrate(ctx); err != nil {
-		log.Printf("Warning during schema migration: %v\n", err)
+		return nil, fmt.Errorf("database schema migration failed: %w", err)
 	}
 
 	return db, nil
@@ -61,6 +61,9 @@ func (db *DB) AutoMigrate(ctx context.Context) error {
 	log.Println("Applying database schema migrations...")
 	if _, err := db.Pool.Exec(ctx, migrations.SchemaSQL); err != nil {
 		return fmt.Errorf("failed to apply schema migrations: %w", err)
+	}
+	if _, err := db.Pool.Exec(ctx, migrations.RequirementsSQL); err != nil {
+		return fmt.Errorf("failed to apply requirements migrations: %w", err)
 	}
 
 	log.Println("Applying initial seed data if not present...")

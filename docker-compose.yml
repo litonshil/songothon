@@ -34,7 +34,7 @@ services:
       DATABASE_URL: "postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_secure_pass}@postgres:5432/${DB_NAME:-songothon_db}?sslmode=disable"
       JWT_SECRET: "${JWT_SECRET:-production-secret-songothon-jwt-token-key-2026}"
       JWT_EXPIRY_HOURS: "${JWT_EXPIRY_HOURS:-72}"
-      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-*} revision"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-*}"
     ports:
       - "8080:8080"
     healthcheck:

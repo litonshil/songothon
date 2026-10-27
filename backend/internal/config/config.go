@@ -16,16 +16,19 @@ type Config struct {
 	JWTSecret      string
 	JWTExpiry      time.Duration
 	AllowedOrigins string
+	FCMServerKey   string
+	FCMProjectID   string
 }
 
 func LoadConfig() (*Config, error) {
-	// Load .env file if it exists, otherwise rely on system environment variables
 	_ = godotenv.Load()
 
 	port := getEnv("PORT", "8080")
 	appEnv := getEnv("APP_ENV", "development")
 	jwtSecret := getEnv("JWT_SECRET", "super-secret-songothon-jwt-key-change-in-production")
 	allowedOrigins := getEnv("CORS_ALLOWED_ORIGINS", "*")
+	fcmServerKey := getEnv("FCM_SERVER_KEY", "")
+	fcmProjectID := getEnv("FCM_PROJECT_ID", "songothon-dev")
 
 	expiryHoursStr := getEnv("JWT_EXPIRY_HOURS", "72")
 	expiryHours, err := strconv.Atoi(expiryHoursStr)
@@ -53,6 +56,8 @@ func LoadConfig() (*Config, error) {
 		JWTSecret:      jwtSecret,
 		JWTExpiry:      time.Duration(expiryHours) * time.Hour,
 		AllowedOrigins: allowedOrigins,
+		FCMServerKey:   fcmServerKey,
+		FCMProjectID:   fcmProjectID,
 	}, nil
 }
 
