@@ -1,56 +1,35 @@
-# ==========================================
-# Multi-Stage Production Dockerfile for Songothon Go Backend
-# ==========================================
+ARG GO_VERSION=1.26
 
-# Stage 1: Builder
-FROM golang:alpine AS builder
+FROM golang:${GO_VERSION}-alpine AS builder
 
-WORKDIR /app
+RUN mkdir /user && \
+    echo 'nobody:x:65534:65534:nobody:/:' > /user/passwd && \
+    echo 'nobody:x:65534:' > /user/group
 
-# Install security certificates & build essentials
-RUN apk update && apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache ca-certificates git
+RUN apk --no-cache add tzdata
 
-# Cache Go modules layers
-COPY go.mod go.sum ./
-RUN go mod download && go mod verify
+WORKDIR /src
+COPY ./ ./
+ENV GOTOOLCHAIN=auto
+RUN CGO_ENABLED=0 go build -o /app .
 
-# Copy source code
-COPY . .
+######## Start a new stage from alpine #######
+FROM alpine:3.19 AS final
 
-# Build statically linked binary with optimizations (strip debug info & symbols)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -trimpath \
-    -ldflags="-w -s" \
-    -o /app/bin/songothon-api \
-    .
-
-# ------------------------------------------
-# Stage 2: Final Minimal Runtime Image
-# ------------------------------------------
-FROM alpine:3.20 AS runner
-
-# Create dedicated non-root user and group
-RUN addgroup -S appgroup -g 10001 && \
-    adduser -S appuser -u 10001 -G appgroup
-
-# Install runtime dependencies (tzdata and certificates)
-RUN apk --no-cache add ca-certificates tzdata
-
-WORKDIR /app
-
-# Copy binary from builder
-COPY --from=builder /app/bin/songothon-api /app/songothon-api
-COPY --from=builder /app/migrations /app/migrations
-
-# Secure ownership
-RUN chown -R appuser:appgroup /app
-
-USER appuser:appgroup
+# Import the user and group files from the first stage.
+COPY --from=builder /user/group /user/passwd /etc/
+# Import the timezone data from build stage.
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# Import the Certificate-Authority certificates for enabling HTTPS.
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Import the compiled executable from the first stage.
+COPY --from=builder /app /app
+# Import the migrations directory from the builder stage.
+COPY --from=builder /src/migrations /migrations
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+USER nobody:nobody
 
-ENTRYPOINT ["/app/songothon-api"]
-CMD ["serve"]
+ENTRYPOINT ["/app"]

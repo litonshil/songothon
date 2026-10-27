@@ -40,7 +40,7 @@ services:
 
   songothon:
     container_name: songothon_api
-    image: songothon
+    image: ghcr.io/litonshil/songothon-be:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
