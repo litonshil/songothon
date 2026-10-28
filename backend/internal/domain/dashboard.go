@@ -29,34 +29,35 @@ type MemberDownPaymentStatus struct {
 }
 
 type MemberDashboardData struct {
-	OrganizationID               uuid.UUID                 `json:"organization_id"`
-	OrganizationName             string                    `json:"organization_name"`
-	OrganizationSlug             string                    `json:"organization_slug"`
-	OrganizationDescription      string                    `json:"organization_description,omitempty"`
-	Currency                     string                    `json:"currency"`
-	AllowPeerListVisibility      bool                      `json:"allow_peer_list_visibility"`
-	AllowPeerFinancialVisibility bool                      `json:"allow_peer_financial_visibility"`
-	CurrentUserRole              OrgRole                   `json:"current_user_role"`
-	PendingApprovalsCount        int                       `json:"pending_approvals_count"`
-	ContributionFrequency        string                    `json:"contribution_frequency"`
-	DueDayOfPeriod               int                       `json:"due_day_of_period"`
-	PersonalSavings              float64                   `json:"personal_savings"`
-	AssignedShares               int                       `json:"assigned_shares"`
-	BasePricePerShare            float64                   `json:"base_price_per_share"`
-	PeriodicFee                  float64                   `json:"periodic_fee"` // Shares * BasePricePerShare
-	CurrentCycle                 string                    `json:"current_cycle"`
-	CurrentCycleStatus           string                    `json:"current_cycle_status"` // Paid, Pending, Unpaid
-	IsCurrentCyclePaid           bool                      `json:"is_current_cycle_paid"`
-	TotalOrgDeposits             float64                   `json:"total_org_deposits"`
-	TotalExpense                 float64                   `json:"total_expense"`
-	TotalIncome                  float64                   `json:"total_income"`
-	VaultBalance                 float64                   `json:"vault_balance"`
-	InvestedCapital              float64                   `json:"invested_capital"`
-	LiquidityReserve             float64                   `json:"liquidity_reserve"`
-	ActiveInvestmentsCount       int                       `json:"active_investments_count"`
-	MemberCount                  int                       `json:"member_count"`
-	MembersDirectory             []PeerMemberOverview      `json:"members_directory"`
-	DownPayments                 []MemberDownPaymentStatus `json:"down_payments"`
+	OrganizationID                  uuid.UUID                 `json:"organization_id"`
+	OrganizationName                string                    `json:"organization_name"`
+	OrganizationSlug                string                    `json:"organization_slug"`
+	OrganizationDescription         string                    `json:"organization_description,omitempty"`
+	Currency                        string                    `json:"currency"`
+	AllowPeerListVisibility         bool                      `json:"allow_peer_list_visibility"`
+	AllowPeerFinancialVisibility    bool                      `json:"allow_peer_financial_visibility"`
+	AllowMemberCollectionVisibility bool                      `json:"allow_member_collection_visibility"`
+	CurrentUserRole                 OrgRole                   `json:"current_user_role"`
+	PendingApprovalsCount           int                       `json:"pending_approvals_count"`
+	ContributionFrequency           string                    `json:"contribution_frequency"`
+	DueDayOfPeriod                  int                       `json:"due_day_of_period"`
+	PersonalSavings                 float64                   `json:"personal_savings"`
+	AssignedShares                  int                       `json:"assigned_shares"`
+	BasePricePerShare               float64                   `json:"base_price_per_share"`
+	PeriodicFee                     float64                   `json:"periodic_fee"` // Shares * BasePricePerShare
+	CurrentCycle                    string                    `json:"current_cycle"`
+	CurrentCycleStatus              string                    `json:"current_cycle_status"` // Paid, Pending, Unpaid
+	IsCurrentCyclePaid              bool                      `json:"is_current_cycle_paid"`
+	TotalOrgDeposits                float64                   `json:"total_org_deposits"`
+	TotalExpense                    float64                   `json:"total_expense"`
+	TotalIncome                     float64                   `json:"total_income"`
+	VaultBalance                    float64                   `json:"vault_balance"`
+	InvestedCapital                 float64                   `json:"invested_capital"`
+	LiquidityReserve                float64                   `json:"liquidity_reserve"`
+	ActiveInvestmentsCount          int                       `json:"active_investments_count"`
+	MemberCount                     int                       `json:"member_count"`
+	MembersDirectory                []PeerMemberOverview      `json:"members_directory"`
+	DownPayments                    []MemberDownPaymentStatus `json:"down_payments"`
 }
 
 type MemberCollectionStatus struct {

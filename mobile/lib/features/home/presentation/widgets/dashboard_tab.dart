@@ -255,45 +255,6 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
             )),
           ],
-          if (admin != null && admin.collectionSummary.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            SectionHeader(title: 'Cycle Collection', actionLabel: admin.currentCycle),
-            ...admin.collectionSummary.take(5).map((item) {
-              final ratio = item.expectedAmount <= 0 ? 0.0 : (item.paidAmount / item.expectedAmount).clamp(0.0, 1.0);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: AppCard(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: Text(item.fullName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
-                          StatusPill.forStatus(item.status),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: ratio,
-                          minHeight: 6,
-                          backgroundColor: AppTheme.borderLight,
-                          valueColor: AlwaysStoppedAnimation(ratio >= 1 ? AppTheme.accentGreen : AppTheme.warningOrange),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${formatMoney(item.paidAmount, _currency)} of ${formatMoney(item.expectedAmount, _currency)}',
-                        style: const TextStyle(fontSize: 11.5, color: AppTheme.textMuted),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ],
           if (member.isAdmin && member.allowPeerListVisibility && member.membersDirectory.isNotEmpty) ...[
             const SizedBox(height: 20),
             SectionHeader(title: 'Community Members'),
@@ -461,7 +422,7 @@ class _CycleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              StatusPill.forStatus(paid ? 'Paid' : 'Pending'),
+              StatusPill.forStatus(member.currentCycleStatus),
             ],
           ),
           if (!paid) ...[

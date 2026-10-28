@@ -84,6 +84,7 @@ class MemberDashboardModel extends Equatable {
   final String currency;
   final bool allowPeerListVisibility;
   final bool allowPeerFinancialVisibility;
+  final bool allowMemberCollectionVisibility;
   final double personalSavings;
   final int assignedShares;
   final double basePricePerShare;
@@ -117,6 +118,7 @@ class MemberDashboardModel extends Equatable {
     required this.currency,
     this.allowPeerListVisibility = true,
     required this.allowPeerFinancialVisibility,
+    this.allowMemberCollectionVisibility = true,
     required this.personalSavings,
     required this.assignedShares,
     required this.basePricePerShare,
@@ -151,6 +153,7 @@ class MemberDashboardModel extends Equatable {
       currency: json['currency']?.toString() ?? 'BDT',
       allowPeerListVisibility: json['allow_peer_list_visibility'] as bool? ?? true,
       allowPeerFinancialVisibility: json['allow_peer_financial_visibility'] as bool? ?? true,
+      allowMemberCollectionVisibility: json['allow_member_collection_visibility'] as bool? ?? true,
       currentUserRole: json['current_user_role']?.toString() ?? 'member',
       pendingApprovalsCount: (json['pending_approvals_count'] as num?)?.toInt() ?? 0,
       personalSavings: (json['personal_savings'] as num?)?.toDouble() ?? 0.0,
@@ -189,6 +192,7 @@ class MemberDashboardModel extends Equatable {
         currency,
         allowPeerListVisibility,
         allowPeerFinancialVisibility,
+        allowMemberCollectionVisibility,
         personalSavings,
         assignedShares,
         basePricePerShare,

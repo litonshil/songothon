@@ -411,6 +411,7 @@ class _MemberDashboardScreenState extends State<MemberDashboardScreen> {
     NumberFormat currencyFormatter,
   ) {
     final isPaid = data.isCurrentCyclePaid;
+    final isPartial = data.currentCycleStatus == 'Partially Paid';
 
     if (isPaid) {
       return Container(
@@ -460,7 +461,9 @@ class _MemberDashboardScreenState extends State<MemberDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Payment Due: ${currencyFormatter.format(data.periodicFee)}',
+                  isPartial
+                      ? 'Partially Paid • Full due ${currencyFormatter.format(data.periodicFee)}'
+                      : 'Payment Due: ${currencyFormatter.format(data.periodicFee)}',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF92400E)),
                 ),
                 Text(

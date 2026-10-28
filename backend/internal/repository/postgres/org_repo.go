@@ -43,12 +43,12 @@ func (r *OrgRepository) Create(
 
 	// 1. Insert Organization
 	orgQuery := `
-		INSERT INTO organizations (id, name, slug, description, currency, allow_peer_list_visibility, allow_peer_financial_visibility, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+		INSERT INTO organizations (id, name, slug, description, currency, allow_peer_list_visibility, allow_peer_financial_visibility, allow_member_collection_visibility, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, orgQuery,
-		org.ID, org.Name, org.Slug, org.Description, org.Currency, org.AllowPeerListVisibility, org.AllowPeerFinancialVisibility, org.CreatedBy,
+		org.ID, org.Name, org.Slug, org.Description, org.Currency, org.AllowPeerListVisibility, org.AllowPeerFinancialVisibility, org.AllowMemberCollectionVisibility, org.CreatedBy,
 	).Scan(&org.ID, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert organization: %w", err)
@@ -90,13 +90,13 @@ func (r *OrgRepository) Create(
 
 func (r *OrgRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Organization, error) {
 	query := `
-		SELECT id, name, slug, COALESCE(description, ''), currency, allow_peer_list_visibility, allow_peer_financial_visibility, created_by, created_at, updated_at
+		SELECT id, name, slug, COALESCE(description, ''), currency, allow_peer_list_visibility, allow_peer_financial_visibility, allow_member_collection_visibility, created_by, created_at, updated_at
 		FROM organizations
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	var org domain.Organization
 	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
-		&org.ID, &org.Name, &org.Slug, &org.Description, &org.Currency, &org.AllowPeerListVisibility, &org.AllowPeerFinancialVisibility, &org.CreatedBy, &org.CreatedAt, &org.UpdatedAt,
+		&org.ID, &org.Name, &org.Slug, &org.Description, &org.Currency, &org.AllowPeerListVisibility, &org.AllowPeerFinancialVisibility, &org.AllowMemberCollectionVisibility, &org.CreatedBy, &org.CreatedAt, &org.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -109,13 +109,13 @@ func (r *OrgRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Orga
 
 func (r *OrgRepository) GetBySlug(ctx context.Context, slug string) (*domain.Organization, error) {
 	query := `
-		SELECT id, name, slug, COALESCE(description, ''), currency, allow_peer_list_visibility, allow_peer_financial_visibility, created_by, created_at, updated_at
+		SELECT id, name, slug, COALESCE(description, ''), currency, allow_peer_list_visibility, allow_peer_financial_visibility, allow_member_collection_visibility, created_by, created_at, updated_at
 		FROM organizations
 		WHERE LOWER(slug) = LOWER($1) AND deleted_at IS NULL
 	`
 	var org domain.Organization
 	err := r.db.Pool.QueryRow(ctx, query, slug).Scan(
-		&org.ID, &org.Name, &org.Slug, &org.Description, &org.Currency, &org.AllowPeerListVisibility, &org.AllowPeerFinancialVisibility, &org.CreatedBy, &org.CreatedAt, &org.UpdatedAt,
+		&org.ID, &org.Name, &org.Slug, &org.Description, &org.Currency, &org.AllowPeerListVisibility, &org.AllowPeerFinancialVisibility, &org.AllowMemberCollectionVisibility, &org.CreatedBy, &org.CreatedAt, &org.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -129,7 +129,7 @@ func (r *OrgRepository) GetBySlug(ctx context.Context, slug string) (*domain.Org
 func (r *OrgRepository) ListUserOrganizations(ctx context.Context, userID uuid.UUID) ([]domain.UserOrgMembershipResponse, error) {
 	query := `
 		SELECT 
-			o.id, o.name, o.slug, COALESCE(o.description, ''), o.currency, o.allow_peer_list_visibility, o.allow_peer_financial_visibility, o.created_by, o.created_at, o.updated_at,
+			o.id, o.name, o.slug, COALESCE(o.description, ''), o.currency, o.allow_peer_list_visibility, o.allow_peer_financial_visibility, o.allow_member_collection_visibility, o.created_by, o.created_at, o.updated_at,
 			m.role, m.shares_count, m.status
 		FROM organization_members m
 		JOIN organizations o ON m.org_id = o.id
@@ -147,7 +147,7 @@ func (r *OrgRepository) ListUserOrganizations(ctx context.Context, userID uuid.U
 		var item domain.UserOrgMembershipResponse
 		err := rows.Scan(
 			&item.Organization.ID, &item.Organization.Name, &item.Organization.Slug, &item.Organization.Description, &item.Organization.Currency,
-			&item.Organization.AllowPeerListVisibility, &item.Organization.AllowPeerFinancialVisibility, &item.Organization.CreatedBy, &item.Organization.CreatedAt, &item.Organization.UpdatedAt,
+			&item.Organization.AllowPeerListVisibility, &item.Organization.AllowPeerFinancialVisibility, &item.Organization.AllowMemberCollectionVisibility, &item.Organization.CreatedBy, &item.Organization.CreatedAt, &item.Organization.UpdatedAt,
 			&item.Role, &item.SharesCount, &item.Status,
 		)
 		if err != nil {
@@ -259,9 +259,9 @@ func (r *OrgRepository) ListMembers(ctx context.Context, orgID uuid.UUID) ([]dom
 	return list, nil
 }
 
-func (r *OrgRepository) UpdatePrivacy(ctx context.Context, orgID uuid.UUID, allowList, allowFinancial bool) error {
-	query := `UPDATE organizations SET allow_peer_list_visibility = $1, allow_peer_financial_visibility = $2, updated_at = NOW() WHERE id = $3`
-	_, err := r.db.Pool.Exec(ctx, query, allowList, allowFinancial, orgID)
+func (r *OrgRepository) UpdatePrivacy(ctx context.Context, orgID uuid.UUID, allowList, allowFinancial, allowCollection bool) error {
+	query := `UPDATE organizations SET allow_peer_list_visibility = $1, allow_peer_financial_visibility = $2, allow_member_collection_visibility = $3, updated_at = NOW() WHERE id = $4`
+	_, err := r.db.Pool.Exec(ctx, query, allowList, allowFinancial, allowCollection, orgID)
 	return err
 }
 

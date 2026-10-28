@@ -346,18 +346,32 @@ func (r *ContributionRepository) GetMemberCycleTotals(ctx context.Context, orgID
 	return approved, pending, err
 }
 
-func (r *ContributionRepository) GetCurrentCycleStatus(ctx context.Context, orgID, userID uuid.UUID, cycle string) (string, error) {
-	approved, pending, err := r.GetMemberCycleTotals(ctx, orgID, userID, cycle)
+func (r *ContributionRepository) ListCycleMemberTotals(ctx context.Context, orgID uuid.UUID) ([]domain.CycleMemberTotal, error) {
+	query := `
+		SELECT
+			target_cycle,
+			user_id,
+			COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN amount ELSE 0 END), 0.0)::float8,
+			COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0.0)::float8
+		FROM contributions
+		WHERE org_id = $1 AND type = 'share_installment' AND status IN ('APPROVED', 'PENDING') AND deleted_at IS NULL
+		GROUP BY target_cycle, user_id
+	`
+	rows, err := r.db.Pool.Query(ctx, query, orgID)
 	if err != nil {
-		return "Unpaid", err
+		return nil, err
 	}
-	if approved > 0 {
-		return "Paid", nil
+	defer rows.Close()
+
+	var list []domain.CycleMemberTotal
+	for rows.Next() {
+		var t domain.CycleMemberTotal
+		if err := rows.Scan(&t.Cycle, &t.UserID, &t.Approved, &t.Pending); err != nil {
+			return nil, err
+		}
+		list = append(list, t)
 	}
-	if pending > 0 {
-		return "Pending", nil
-	}
-	return "Unpaid", nil
+	return list, rows.Err()
 }
 
 func (r *ContributionRepository) GetMemberTargetTotals(ctx context.Context, orgID, userID uuid.UUID, contributionType domain.ContributionType, target string) (approved, pending float64, err error) {

@@ -111,6 +111,7 @@ class OrgRepository {
     required String slug,
     required bool allowList,
     required bool allowFinancial,
+    bool? allowCollection,
   }) async {
     try {
       await apiClient.dio.patch(
@@ -118,6 +119,7 @@ class OrgRepository {
         data: {
           'allow_peer_list_visibility': allowList,
           'allow_peer_financial_visibility': allowFinancial,
+          'allow_member_collection_visibility': ?allowCollection,
         },
       );
     } catch (e) {

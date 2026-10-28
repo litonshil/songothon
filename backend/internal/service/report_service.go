@@ -55,7 +55,8 @@ func (s *ReportService) GetMemberDashboard(
 	periodicFee := float64(member.SharesCount) * basePrice
 
 	personalSavings, _ := s.contribRepo.GetUserCumulativeDeposits(ctx, org.ID, member.UserID)
-	currentStatus, _ := s.contribRepo.GetCurrentCycleStatus(ctx, org.ID, member.UserID, currentCycle)
+	approvedThisCycle, pendingThisCycle, _ := s.contribRepo.GetMemberCycleTotals(ctx, org.ID, member.UserID, currentCycle)
+	currentStatus := domain.CycleStatus(approvedThisCycle, pendingThisCycle, periodicFee)
 	isCyclePaid := currentStatus == "Paid"
 
 	vaultBalance, _ := s.contribRepo.GetVaultBalance(ctx, org.ID)
@@ -94,7 +95,8 @@ func (s *ReportService) GetMemberDashboard(
 			shares := m.SharesCount
 			overview.SharesCount = &shares
 			overview.TotalSavings = m.TotalSavings
-			statusStr, _ := s.contribRepo.GetCurrentCycleStatus(ctx, org.ID, m.UserID, currentCycle)
+			approved, pendingAmount, _ := s.contribRepo.GetMemberCycleTotals(ctx, org.ID, m.UserID, currentCycle)
+			statusStr := domain.CycleStatus(approved, pendingAmount, float64(m.SharesCount)*basePrice)
 			overview.CurrentStatus = &statusStr
 		}
 		directory = append(directory, overview)
@@ -110,34 +112,35 @@ func (s *ReportService) GetMemberDashboard(
 	downPayments := s.buildDownPaymentStatuses(ctx, org.ID, member.UserID)
 
 	return &domain.MemberDashboardData{
-		OrganizationID:               org.ID,
-		OrganizationName:             org.Name,
-		OrganizationSlug:             org.Slug,
-		OrganizationDescription:      org.Description,
-		Currency:                     org.Currency,
-		AllowPeerListVisibility:      org.AllowPeerListVisibility,
-		AllowPeerFinancialVisibility: org.AllowPeerFinancialVisibility,
-		CurrentUserRole:              member.Role,
-		PendingApprovalsCount:        pendingCount,
-		ContributionFrequency:        frequency,
-		DueDayOfPeriod:               dueDay,
-		PersonalSavings:              personalSavings,
-		AssignedShares:               member.SharesCount,
-		BasePricePerShare:            basePrice,
-		PeriodicFee:                  periodicFee,
-		CurrentCycle:                 currentCycle,
-		CurrentCycleStatus:           currentStatus,
-		IsCurrentCyclePaid:           isCyclePaid,
-		TotalOrgDeposits:             totalOrgDeposits,
-		TotalExpense:                 totalExpense,
-		TotalIncome:                  totalIncome,
-		VaultBalance:                 vaultBalance,
-		InvestedCapital:              investedCapital,
-		LiquidityReserve:             liquidityReserve,
-		ActiveInvestmentsCount:       activeInvCount,
-		MemberCount:                  activeMemberCount,
-		MembersDirectory:             directory,
-		DownPayments:                 downPayments,
+		OrganizationID:                  org.ID,
+		OrganizationName:                org.Name,
+		OrganizationSlug:                org.Slug,
+		OrganizationDescription:         org.Description,
+		Currency:                        org.Currency,
+		AllowPeerListVisibility:         org.AllowPeerListVisibility,
+		AllowPeerFinancialVisibility:    org.AllowPeerFinancialVisibility,
+		AllowMemberCollectionVisibility: org.AllowMemberCollectionVisibility,
+		CurrentUserRole:                 member.Role,
+		PendingApprovalsCount:           pendingCount,
+		ContributionFrequency:           frequency,
+		DueDayOfPeriod:                  dueDay,
+		PersonalSavings:                 personalSavings,
+		AssignedShares:                  member.SharesCount,
+		BasePricePerShare:               basePrice,
+		PeriodicFee:                     periodicFee,
+		CurrentCycle:                    currentCycle,
+		CurrentCycleStatus:              currentStatus,
+		IsCurrentCyclePaid:              isCyclePaid,
+		TotalOrgDeposits:                totalOrgDeposits,
+		TotalExpense:                    totalExpense,
+		TotalIncome:                     totalIncome,
+		VaultBalance:                    vaultBalance,
+		InvestedCapital:                 investedCapital,
+		LiquidityReserve:                liquidityReserve,
+		ActiveInvestmentsCount:          activeInvCount,
+		MemberCount:                     activeMemberCount,
+		MembersDirectory:                directory,
+		DownPayments:                    downPayments,
 	}, nil
 }
 
@@ -205,20 +208,15 @@ func (s *ReportService) GetAdminDashboard(
 			}
 			memberCount++
 			approved, pendingAmount, _ := s.contribRepo.GetMemberCycleTotals(ctx, org.ID, m.UserID, currentCycle)
-			status := "Unpaid"
-			if approved > 0 {
-				status = "Paid"
-			} else if pendingAmount > 0 {
-				status = "Pending"
-			}
+			expectedAmount := float64(m.SharesCount) * shareConfig.BasePricePerShare
 			collection = append(collection, domain.MemberCollectionStatus{
 				UserID:         m.UserID,
 				FullName:       m.FullName,
 				SharesCount:    m.SharesCount,
-				ExpectedAmount: float64(m.SharesCount) * shareConfig.BasePricePerShare,
+				ExpectedAmount: expectedAmount,
 				PaidAmount:     approved,
 				PendingAmount:  pendingAmount,
-				Status:         status,
+				Status:         domain.CycleStatus(approved, pendingAmount, expectedAmount),
 			})
 		}
 	}

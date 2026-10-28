@@ -32,17 +32,18 @@ const (
 )
 
 type Organization struct {
-	ID                           uuid.UUID  `json:"id" db:"id"`
-	Name                         string     `json:"name" db:"name"`
-	Slug                         string     `json:"slug" db:"slug"`
-	Description                  string     `json:"description" db:"description"`
-	Currency                     string     `json:"currency" db:"currency"`
-	AllowPeerListVisibility      bool       `json:"allow_peer_list_visibility" db:"allow_peer_list_visibility"`
-	AllowPeerFinancialVisibility bool       `json:"allow_peer_financial_visibility" db:"allow_peer_financial_visibility"`
-	CreatedBy                    *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
-	CreatedAt                    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt                    time.Time  `json:"updated_at" db:"updated_at"`
-	DeletedAt                    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	ID                              uuid.UUID  `json:"id" db:"id"`
+	Name                            string     `json:"name" db:"name"`
+	Slug                            string     `json:"slug" db:"slug"`
+	Description                     string     `json:"description" db:"description"`
+	Currency                        string     `json:"currency" db:"currency"`
+	AllowPeerListVisibility         bool       `json:"allow_peer_list_visibility" db:"allow_peer_list_visibility"`
+	AllowPeerFinancialVisibility    bool       `json:"allow_peer_financial_visibility" db:"allow_peer_financial_visibility"`
+	AllowMemberCollectionVisibility bool       `json:"allow_member_collection_visibility" db:"allow_member_collection_visibility"`
+	CreatedBy                       *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
+	CreatedAt                       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt                       time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt                       *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 type OrganizationMember struct {
@@ -126,15 +127,16 @@ type PendingJoinRequest struct {
 // Request & Response DTOs
 
 type CreateOrganizationRequest struct {
-	Name                         string                `json:"name" validate:"required,min=2,max=200"`
-	Slug                         string                `json:"slug" validate:"required,min=2,max=100"`
-	Currency                     string                `json:"currency"`
-	Description                  string                `json:"description,omitempty"`
-	AllowPeerListVisibility      *bool                 `json:"allow_peer_list_visibility,omitempty"`
-	AllowPeerFinancialVisibility *bool                 `json:"allow_peer_financial_visibility,omitempty"`
-	BasePricePerShare            float64               `json:"base_price_per_share" validate:"required,gt=0"`
-	ContributionFrequency        ContributionFrequency `json:"contribution_frequency" validate:"required,oneof=weekly monthly yearly"`
-	InitialAdminShares           int                   `json:"initial_admin_shares"`
+	Name                            string                `json:"name" validate:"required,min=2,max=200"`
+	Slug                            string                `json:"slug" validate:"required,min=2,max=100"`
+	Currency                        string                `json:"currency"`
+	Description                     string                `json:"description,omitempty"`
+	AllowPeerListVisibility         *bool                 `json:"allow_peer_list_visibility,omitempty"`
+	AllowPeerFinancialVisibility    *bool                 `json:"allow_peer_financial_visibility,omitempty"`
+	AllowMemberCollectionVisibility *bool                 `json:"allow_member_collection_visibility,omitempty"`
+	BasePricePerShare               float64               `json:"base_price_per_share" validate:"required,gt=0"`
+	ContributionFrequency           ContributionFrequency `json:"contribution_frequency" validate:"required,oneof=weekly monthly yearly"`
+	InitialAdminShares              int                   `json:"initial_admin_shares"`
 }
 
 type JoinOrganizationRequest struct {
@@ -154,8 +156,9 @@ type UpdateMemberRequest struct {
 }
 
 type UpdateOrgPrivacyRequest struct {
-	AllowPeerListVisibility      *bool `json:"allow_peer_list_visibility,omitempty"`
-	AllowPeerFinancialVisibility *bool `json:"allow_peer_financial_visibility,omitempty"`
+	AllowPeerListVisibility         *bool `json:"allow_peer_list_visibility,omitempty"`
+	AllowPeerFinancialVisibility    *bool `json:"allow_peer_financial_visibility,omitempty"`
+	AllowMemberCollectionVisibility *bool `json:"allow_member_collection_visibility,omitempty"`
 }
 
 type ConfigureSharesRequest struct {

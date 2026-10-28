@@ -4,6 +4,7 @@ import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../auth/presentation/bloc/auth_cubit.dart';
+import '../../../collections/presentation/screens/collections_screen.dart';
 import '../../../dashboard/data/models/member_dashboard_model.dart';
 import '../../../dashboard/data/repositories/dashboard_repository.dart';
 import '../../../expenses/presentation/screens/expenses_screen.dart';
@@ -143,6 +144,20 @@ class _MoreTabState extends State<MoreTab> {
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
               ),
               const Divider(height: 1),
+              if (widget.isAdmin || (dashboard?.allowMemberCollectionVisibility ?? false)) ...[
+                _MenuTile(
+                  icon: Icons.view_list_rounded,
+                  title: 'Collection List',
+                  subtitle: 'Cycle-wise payment status of members',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => CollectionsScreen(
+                      orgSlug: widget.orgSlug,
+                      currency: dashboard?.currency ?? 'BDT',
+                    ),
+                  )),
+                ),
+                const Divider(height: 1),
+              ],
               _MenuTile(
                 icon: Icons.payments_outlined,
                 title: 'Expenses',

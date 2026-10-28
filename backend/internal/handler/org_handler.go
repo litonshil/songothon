@@ -148,20 +148,25 @@ func (h *OrgHandler) UpdatePrivacy(c echo.Context) error {
 
 	allowList := org.AllowPeerListVisibility
 	allowFinancial := org.AllowPeerFinancialVisibility
+	allowCollection := org.AllowMemberCollectionVisibility
 	if req.AllowPeerListVisibility != nil {
 		allowList = *req.AllowPeerListVisibility
 	}
 	if req.AllowPeerFinancialVisibility != nil {
 		allowFinancial = *req.AllowPeerFinancialVisibility
 	}
+	if req.AllowMemberCollectionVisibility != nil {
+		allowCollection = *req.AllowMemberCollectionVisibility
+	}
 
-	if err := h.orgService.UpdatePrivacy(c.Request().Context(), org.ID, adminID, allowList, allowFinancial); err != nil {
+	if err := h.orgService.UpdatePrivacy(c.Request().Context(), org.ID, adminID, allowList, allowFinancial, allowCollection); err != nil {
 		return response.InternalError(c, err.Error())
 	}
 
 	return response.Success(c, "Organization privacy settings updated", echo.Map{
-		"allow_peer_list_visibility":      allowList,
-		"allow_peer_financial_visibility": allowFinancial,
+		"allow_peer_list_visibility":         allowList,
+		"allow_peer_financial_visibility":    allowFinancial,
+		"allow_member_collection_visibility": allowCollection,
 	})
 }
 

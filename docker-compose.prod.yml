@@ -1,0 +1,66 @@
+name: songothon
+
+services:
+  consul:
+    image: consul:1.14.5
+    container_name: songothon_consul
+    restart: unless-stopped
+    command: agent -server -bootstrap-expect=1 -data-dir=/consul/data -client=0.0.0.0 -ui
+    ports:
+      - "127.0.0.1:8500:8500"
+    volumes:
+      - songothon_consul:/consul/data
+    healthcheck:
+      test: ["CMD", "consul", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - songothon_networks
+
+  db:
+    container_name: songothon_postgres
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=songothon_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - songothon_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d songothon_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - songothon_networks
+
+  songothon:
+    container_name: songothon_api
+    image: ghcr.io/litonshil/songothon-be:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    command: serve
+    environment:
+      - CONSUL_URL=http://songothon_consul:8500
+      - CONSUL_PATH=songothon
+    depends_on:
+      consul:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - songothon_networks
+
+networks:
+  songothon_networks:
+    name: songothon_networks
+    driver: bridge
+
+volumes:
+  songothon_db:
+    name: songothon_postgres_data
+  songothon_consul:
+    name: songothon-consul-data

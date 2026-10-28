@@ -142,6 +142,8 @@ func runServer(ctx context.Context) error {
 	// Tenant Member Endpoints (Accessible to all active members of the tenant)
 	tenantGroup.GET("", orgHandler.GetOrg)
 	tenantGroup.GET("/dashboard/member", reportHandler.GetMemberDashboard)
+	tenantGroup.GET("/collections", reportHandler.ListCollections)
+	tenantGroup.GET("/collections/:cycle", reportHandler.GetCollectionCycle)
 	tenantGroup.GET("/members", orgHandler.ListMembers)
 	tenantGroup.POST("/contributions/submit", contribHandler.SubmitDeposit)
 	tenantGroup.GET("/contributions/my-history", contribHandler.ListMyHistory)

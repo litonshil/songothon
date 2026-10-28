@@ -89,3 +89,16 @@ type MemberDuesSummary struct {
 	IsCyclePaid        bool      `json:"is_cycle_paid"`
 	CumulativeDeposits float64   `json:"cumulative_deposits"`
 }
+
+func CycleStatus(approved, pending, expected float64) string {
+	switch {
+	case approved > 0 && (expected <= 0 || approved >= expected):
+		return "Paid"
+	case approved > 0:
+		return "Partially Paid"
+	case pending > 0:
+		return "Pending"
+	default:
+		return "Unpaid"
+	}
+}

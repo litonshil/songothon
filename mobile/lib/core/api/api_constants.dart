@@ -38,6 +38,8 @@ class ApiConstants {
   // Multi-tenant Tenant Scoped Parameterized Builders
   static String memberDashboard(String slug) => '/organizations/$slug/dashboard/member';
   static String adminDashboard(String slug) => '/organizations/$slug/admin/dashboard';
+  static String collections(String slug) => '/organizations/$slug/collections';
+  static String collectionCycle(String slug, String cycle) => '/organizations/$slug/collections/$cycle';
   static String submitDepositForOrg(String slug) => '/organizations/$slug/contributions/submit';
   static String myHistoryForOrg(String slug) => '/organizations/$slug/contributions/my-history';
   static String adminPendingDepositsForOrg(String slug) => '/organizations/$slug/admin/contributions/pending';

@@ -60,6 +60,10 @@ func (s *OrgService) CreateOrganization(ctx context.Context, creatorID uuid.UUID
 	if req.AllowPeerListVisibility != nil {
 		peerListVis = *req.AllowPeerListVisibility
 	}
+	collectionVis := true
+	if req.AllowMemberCollectionVisibility != nil {
+		collectionVis = *req.AllowMemberCollectionVisibility
+	}
 
 	adminShares := req.InitialAdminShares
 	if adminShares <= 0 {
@@ -77,12 +81,13 @@ func (s *OrgService) CreateOrganization(ctx context.Context, creatorID uuid.UUID
 	}
 
 	org := &domain.Organization{
-		Name:                         strings.TrimSpace(req.Name),
-		Slug:                         slug,
-		Description:                  strings.TrimSpace(req.Description),
-		Currency:                     currency,
-		AllowPeerListVisibility:      peerListVis,
-		AllowPeerFinancialVisibility: peerVis,
+		Name:                            strings.TrimSpace(req.Name),
+		Slug:                            slug,
+		Description:                     strings.TrimSpace(req.Description),
+		Currency:                        currency,
+		AllowPeerListVisibility:         peerListVis,
+		AllowPeerFinancialVisibility:    peerVis,
+		AllowMemberCollectionVisibility: collectionVis,
 	}
 
 	createdOrg, err := s.orgRepo.Create(ctx, org, creatorID, adminShares, basePrice, freq)
@@ -454,8 +459,8 @@ func (s *OrgService) ListMembers(ctx context.Context, orgID uuid.UUID) ([]domain
 	return s.orgRepo.ListMembers(ctx, orgID)
 }
 
-func (s *OrgService) UpdatePrivacy(ctx context.Context, orgID, adminID uuid.UUID, allowList, allowFinancial bool) error {
-	if err := s.orgRepo.UpdatePrivacy(ctx, orgID, allowList, allowFinancial); err != nil {
+func (s *OrgService) UpdatePrivacy(ctx context.Context, orgID, adminID uuid.UUID, allowList, allowFinancial, allowCollection bool) error {
+	if err := s.orgRepo.UpdatePrivacy(ctx, orgID, allowList, allowFinancial, allowCollection); err != nil {
 		return fmt.Errorf("failed to update privacy settings: %w", err)
 	}
 
@@ -466,8 +471,9 @@ func (s *OrgService) UpdatePrivacy(ctx context.Context, orgID, adminID uuid.UUID
 		EntityType: "organizations",
 		EntityID:   &orgID,
 		DetailsJSON: map[string]interface{}{
-			"allow_peer_list_visibility":      allowList,
-			"allow_peer_financial_visibility": allowFinancial,
+			"allow_peer_list_visibility":         allowList,
+			"allow_peer_financial_visibility":    allowFinancial,
+			"allow_member_collection_visibility": allowCollection,
 		},
 	})
 

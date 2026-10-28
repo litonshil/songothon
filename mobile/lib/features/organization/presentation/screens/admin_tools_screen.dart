@@ -23,6 +23,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
   String? _error;
   bool _allowList = true;
   bool _allowFinancial = true;
+  bool _allowCollection = true;
   double _basePrice = 1000;
   String _frequency = 'monthly';
   int _dueDay = 10;
@@ -55,6 +56,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
       setState(() {
         _allowList = dashboard.allowPeerListVisibility;
         _allowFinancial = dashboard.allowPeerFinancialVisibility;
+        _allowCollection = dashboard.allowMemberCollectionVisibility;
         _basePrice = dashboard.basePricePerShare;
         _frequency = dashboard.contributionFrequency;
         _dueDay = dashboard.dueDayOfPeriod;
@@ -73,18 +75,21 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
     }
   }
 
-  Future<void> _savePrivacy({bool? list, bool? financial}) async {
+  Future<void> _savePrivacy({bool? list, bool? financial, bool? collection}) async {
     final newList = list ?? _allowList;
     final newFinancial = financial ?? _allowFinancial;
+    final newCollection = collection ?? _allowCollection;
     setState(() {
       _allowList = newList;
       _allowFinancial = newFinancial;
+      _allowCollection = newCollection;
     });
     try {
       await context.read<OrgRepository>().updatePrivacy(
         slug: widget.orgSlug,
         allowList: newList,
         allowFinancial: newFinancial,
+        allowCollection: newCollection,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Privacy settings saved.')));
@@ -606,6 +611,14 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                             activeThumbColor: AppTheme.darkGreen,
                             title: const Text('Peer financial visibility', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
                             subtitle: const Text('Members can see each other\'s savings totals', style: TextStyle(fontSize: 11)),
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            value: _allowCollection,
+                            onChanged: (value) => _savePrivacy(collection: value),
+                            activeThumbColor: AppTheme.darkGreen,
+                            title: const Text('Collection list visibility', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                            subtitle: const Text('Members can see cycle-wise collection list and payment status', style: TextStyle(fontSize: 11)),
                           ),
                         ],
                       ),

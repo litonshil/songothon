@@ -38,15 +38,33 @@ services:
     networks:
       - songothon_networks
 
+  redis:
+    image: redis:7-alpine
+    container_name: songothon_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass password123
+    volumes:
+      - songothon_cache:/data:rw
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "password123", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - songothon_networks
+
   songothon:
     container_name: songothon_api
-    image: ghcr.io/litonshil/songothon-be:latest
+    image: songothon-be:local
     build:
       context: ./backend
-      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     command: serve
+    volumes:
+      - ./backend:/project
     environment:
       - CONSUL_URL=http://songothon_consul:8500
       - CONSUL_PATH=songothon
@@ -55,6 +73,8 @@ services:
       consul:
         condition: service_healthy
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - songothon_networks
@@ -75,3 +95,5 @@ volumes:
     name: songothon_postgres_data
   songothon_consul:
     name: songothon-consul-data
+  songothon_cache:
+    name: songothon-cache-data

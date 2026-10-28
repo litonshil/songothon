@@ -106,19 +106,21 @@ func (w *DuesWorker) CheckAndNotifyUpcomingDues(ctx context.Context) error {
 			continue
 		}
 
-		// Query members who have NOT paid for this cycle
+		// Query members whose approved payments for this cycle do not cover their due (unpaid or partially paid)
 		memberQuery := `
-			SELECT m.user_id, m.shares_count, u.full_name
+			SELECT m.user_id, m.shares_count, u.full_name, paid.total
 			FROM organization_members m
 			JOIN users u ON m.user_id = u.id
+			CROSS JOIN LATERAL (
+				SELECT COALESCE(SUM(c.amount), 0)::float8 AS total
+				FROM contributions c
+				WHERE c.org_id = m.org_id AND c.user_id = m.user_id
+				  AND c.target_cycle = $2 AND c.status = 'APPROVED' AND c.deleted_at IS NULL
+			) paid
 			WHERE m.org_id = $1 AND m.status = 'active' AND m.deleted_at IS NULL
-			  AND NOT EXISTS (
-				  SELECT 1 FROM contributions c
-				  WHERE c.org_id = m.org_id AND c.user_id = m.user_id 
-				    AND c.target_cycle = $2 AND c.status = 'APPROVED' AND c.deleted_at IS NULL
-			  )
+			  AND paid.total < m.shares_count * $3::float8
 		`
-		mRows, err := w.pool.Query(ctx, memberQuery, t.ID.ID, currentCycle)
+		mRows, err := w.pool.Query(ctx, memberQuery, t.ID.ID, currentCycle, t.BasePrice)
 		if err != nil {
 			log.Printf("[DuesWorker] Failed to query unpaid members for org %s: %v\n", t.ID.Name, err)
 			continue
@@ -128,21 +130,22 @@ func (w *DuesWorker) CheckAndNotifyUpcomingDues(ctx context.Context) error {
 			var userID domain.OrganizationMember
 			var shares int
 			var fullName string
-			if err := mRows.Scan(&userID.UserID, &shares, &fullName); err != nil {
+			var paidAmount float64
+			if err := mRows.Scan(&userID.UserID, &shares, &fullName, &paidAmount); err != nil {
 				continue
 			}
 
-			periodicFee := float64(shares) * t.BasePrice
+			amountDue := float64(shares)*t.BasePrice - paidAmount
 			title := "Upcoming Contribution Due ⏳"
 			body := fmt.Sprintf("Hi %s, your installment of %s %.2f for cycle %s is due by day %d.",
-				fullName, t.ID.Currency, periodicFee, currentCycle, t.DueDay)
+				fullName, t.ID.Currency, amountDue, currentCycle, t.DueDay)
 
 			// Send push notification & persist in notifications table
 			_ = w.notifService.SendToUser(ctx, &t.ID.ID, userID.UserID, title, body, "dues_alert", map[string]string{
-				"org_id":       t.ID.ID.String(),
-				"cycle":        currentCycle,
-				"periodic_fee": fmt.Sprintf("%.2f", periodicFee),
-				"due_day":      fmt.Sprintf("%d", t.DueDay),
+				"org_id":     t.ID.ID.String(),
+				"cycle":      currentCycle,
+				"amount_due": fmt.Sprintf("%.2f", amountDue),
+				"due_day":    fmt.Sprintf("%d", t.DueDay),
 			})
 		}
 		mRows.Close()
