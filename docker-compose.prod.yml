@@ -4,55 +4,66 @@ services:
   consul:
     image: consul:1.14.5
     container_name: songothon_consul
-    restart: unless-stopped
-    command: agent -server -bootstrap-expect=1 -data-dir=/consul/data -client=0.0.0.0 -ui
+    restart: always
+    command: agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0 -data-dir=/consul/data
     ports:
-      - "127.0.0.1:8500:8500"
+      - "8600:8500"
     volumes:
-      - songothon_consul:/consul/data
-    healthcheck:
-      test: ["CMD", "consul", "info"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - songothon_consul:/consul/data:rw
     networks:
       - songothon_networks
 
   db:
     container_name: songothon_postgres
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=songothon_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    image: postgres:15-alpine
+    restart: always
+    ports:
+      - "5432:5432"
     volumes:
-      - songothon_db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d songothon_db"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - songothon_db:/var/lib/postgresql/data:rw
+    environment:
+      - POSTGRES_DB=songothon
+      - POSTGRES_USER=song_user
+      - POSTGRES_PASSWORD=song@009
+    tty: true
     networks:
       - songothon_networks
 
-  songothon:
+  redis:
+    image: redis:7-alpine
+    container_name: songothon_redis
+    restart: always
+    ports:
+      - "6380:6379"
+    command: redis-server --requirepass password123
+    volumes:
+      - songothon_cache:/data:rw
+    networks:
+      - songothon_networks
+
+  backend:
     container_name: songothon_api
     image: ghcr.io/litonshil/songothon-be:${IMAGE_TAG:-latest}
-    restart: unless-stopped
+    restart: always
     ports:
       - "8080:8080"
     command: serve
     environment:
       - CONSUL_URL=http://songothon_consul:8500
       - CONSUL_PATH=songothon
+    tty: true
     depends_on:
-      consul:
-        condition: service_healthy
-      db:
-        condition: service_healthy
+      - consul
+      - db
+      - redis
     networks:
       - songothon_networks
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
 
 networks:
   songothon_networks:
@@ -62,5 +73,7 @@ networks:
 volumes:
   songothon_db:
     name: songothon_postgres_data
+  songothon_cache:
+    name: songothon-cache-data
   songothon_consul:
     name: songothon-consul-data

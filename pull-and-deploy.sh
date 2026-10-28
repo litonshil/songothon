@@ -17,16 +17,12 @@ else
 fi
 
 # 2. Pull latest images
-echo ">>> Pulling Docker images defined in docker-compose.yml..."
-docker compose -f docker-compose.yml pull
+echo ">>> Pulling Docker images defined in docker-compose.prod.yml..."
+docker compose -f docker-compose.prod.yml pull
 
-# 3. Apply database migrations (starts consul and db first if they are not running)
-echo ">>> Applying database migrations..."
-docker compose -f docker-compose.yml run --rm songothon migrate up
-
-# 4. Deploy/Restart services
+# 3. Deploy/Restart services
 echo ">>> Restarting services with docker compose..."
-docker compose -f docker-compose.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
 echo ">>> Cleaning up old unused images..."
 docker image prune -f

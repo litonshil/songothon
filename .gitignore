@@ -1,0 +1,33 @@
+# Backend config
+backend/config.prod.json
+backend/config.*.json
+!backend/config.local.json
+
+# Dependencies
+vendor/
+
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test
+*.test
+coverage.out
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
