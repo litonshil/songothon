@@ -1,5 +1,4 @@
--- Organization expenses recorded by org admins. Each expense also posts an
--- 'expense' outflow to the transactions ledger, which reduces the vault balance.
+-- 000003_create_expenses_schema.up.sql
 
 CREATE TABLE IF NOT EXISTS expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -10,8 +9,9 @@ CREATE TABLE IF NOT EXISTS expenses (
     expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
     notes TEXT NOT NULL DEFAULT '',
     recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX IF NOT EXISTS idx_expenses_org_date ON expenses(org_id, expense_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_expenses_org_date ON expenses(org_id, expense_date DESC);
+CREATE INDEX IF NOT EXISTS idx_expenses_recorded_by ON expenses(recorded_by);

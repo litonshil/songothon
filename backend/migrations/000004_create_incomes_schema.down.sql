@@ -1,3 +1,5 @@
+-- 000004_create_incomes_schema.down.sql
+
 DELETE FROM transactions WHERE type = 'income' AND reference_table = 'incomes';
 
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check;

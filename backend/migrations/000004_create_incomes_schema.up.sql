@@ -1,5 +1,4 @@
--- Organization income recorded by org admins. Each income also posts an
--- 'income' inflow to the transactions ledger, which increases the vault balance.
+-- 000004_create_incomes_schema.up.sql
 
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
 ALTER TABLE transactions
@@ -15,8 +14,9 @@ CREATE TABLE IF NOT EXISTS incomes (
     income_date DATE NOT NULL DEFAULT CURRENT_DATE,
     notes TEXT NOT NULL DEFAULT '',
     recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX IF NOT EXISTS idx_incomes_org_date ON incomes(org_id, income_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_incomes_org_date ON incomes(org_id, income_date DESC);
+CREATE INDEX IF NOT EXISTS idx_incomes_recorded_by ON incomes(recorded_by);
