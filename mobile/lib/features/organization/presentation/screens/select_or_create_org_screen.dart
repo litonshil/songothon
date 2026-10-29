@@ -8,6 +8,20 @@ import '../../../shared/presentation/widgets/app_widgets.dart';
 import '../../data/models/organization_model.dart';
 import '../../data/repositories/org_repository.dart';
 
+/// Slug rules: one word, 6-20 characters, letters/numbers with optional - or _.
+final RegExp _orgSlugPattern = RegExp(r'^[a-z0-9][a-z0-9_-]*[a-z0-9]$');
+
+String? validateOrgSlug(String slug) {
+  if (slug.isEmpty) return 'Organization slug is required';
+  if (slug.length < 6 || slug.length > 20) {
+    return 'Slug must be between 6 and 20 characters';
+  }
+  if (!_orgSlugPattern.hasMatch(slug)) {
+    return 'Slug must be one word using only letters, numbers, - or _';
+  }
+  return null;
+}
+
 class SelectOrCreateOrgScreen extends StatefulWidget {
   final OrgRepository orgRepository;
 
@@ -135,6 +149,7 @@ class _SelectOrCreateOrgScreenState extends State<SelectOrCreateOrgScreen> {
     final descriptionController = TextEditingController();
     final priceController = TextEditingController(text: '1000');
     String frequency = 'monthly';
+    String? slugError;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -163,7 +178,19 @@ class _SelectOrCreateOrgScreenState extends State<SelectOrCreateOrgScreen> {
                 TextField(
                   controller: slugController,
                   autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'Unique slug', hintText: 'e.g. ekota-dhaka', prefixIcon: Icon(Icons.alternate_email_rounded)),
+                  maxLength: 20,
+                  onChanged: (_) {
+                    if (slugError != null) setSheetState(() => slugError = null);
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Unique slug',
+                    hintText: 'e.g. ekota-dhaka',
+                    prefixIcon: const Icon(Icons.alternate_email_rounded),
+                    helperText: 'One word, 6-20 characters (letters, numbers, - or _)',
+                    helperMaxLines: 2,
+                    errorText: slugError,
+                    counterText: '',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -202,7 +229,12 @@ class _SelectOrCreateOrgScreenState extends State<SelectOrCreateOrgScreen> {
                     final name = nameController.text.trim();
                     final slug = slugController.text.trim().toLowerCase();
                     final price = double.tryParse(priceController.text.trim()) ?? 1000;
-                    if (name.isEmpty || slug.isEmpty) return;
+                    if (name.isEmpty) return;
+                    final validationError = validateOrgSlug(slug);
+                    if (validationError != null) {
+                      setSheetState(() => slugError = validationError);
+                      return;
+                    }
                     Navigator.pop(ctx);
                     try {
                       final org = await widget.orgRepository.createOrganization(

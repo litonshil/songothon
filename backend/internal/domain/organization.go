@@ -128,7 +128,7 @@ type PendingJoinRequest struct {
 
 type CreateOrganizationRequest struct {
 	Name                            string                `json:"name" validate:"required,min=2,max=200"`
-	Slug                            string                `json:"slug" validate:"required,min=2,max=100"`
+	Slug                            string                `json:"slug" validate:"required,min=6,max=20"`
 	Currency                        string                `json:"currency"`
 	Description                     string                `json:"description,omitempty"`
 	AllowPeerListVisibility         *bool                 `json:"allow_peer_list_visibility,omitempty"`

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"songothon/internal/domain"
 )
 
@@ -51,6 +52,10 @@ func (r *OrgRepository) Create(
 		org.ID, org.Name, org.Slug, org.Description, org.Currency, org.AllowPeerListVisibility, org.AllowPeerFinancialVisibility, org.AllowMemberCollectionVisibility, org.CreatedBy,
 	).Scan(&org.ID, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, fmt.Errorf("organization slug '%s' is already in use. Please choose another", org.Slug)
+		}
 		return nil, fmt.Errorf("failed to insert organization: %w", err)
 	}
 

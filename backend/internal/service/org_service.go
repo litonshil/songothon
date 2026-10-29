@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -32,10 +33,20 @@ func NewOrgService(
 	}
 }
 
+// orgSlugPattern allows a single word made of lowercase letters, digits,
+// hyphens and underscores (no spaces or other characters).
+var orgSlugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*[a-z0-9]$`)
+
 func (s *OrgService) CreateOrganization(ctx context.Context, creatorID uuid.UUID, req *domain.CreateOrganizationRequest) (*domain.Organization, error) {
 	slug := strings.ToLower(strings.TrimSpace(req.Slug))
 	if slug == "" {
 		return nil, errors.New("organization slug is required")
+	}
+	if len(slug) < 6 || len(slug) > 20 {
+		return nil, errors.New("organization slug must be between 6 and 20 characters")
+	}
+	if !orgSlugPattern.MatchString(slug) {
+		return nil, errors.New("organization slug must be a single word using only letters, numbers, hyphens or underscores")
 	}
 
 	// Check if slug is already taken
