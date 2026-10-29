@@ -64,16 +64,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       // Branding Icon & Title
                       Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryNavy,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance_wallet_rounded,
-                            size: 48,
-                            color: AppTheme.accentGreen,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.asset(
+                            'assets/logo/logo_option_a.png',
+                            width: 96,
+                            height: 96,
+                            fit: BoxFit.cover,
                           ),
                         ),
                       ),

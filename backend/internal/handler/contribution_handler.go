@@ -26,11 +26,15 @@ func (h *ContributionHandler) SubmitDeposit(c echo.Context) error {
 		return response.BadRequest(c, "Invalid deposit submission payload")
 	}
 
-	contrib, err := h.contribService.SubmitDeposit(c.Request().Context(), org.ID, userID, &req)
+	isAdmin := middleware.GetCurrentRole(c) == domain.RoleOrgAdmin
+	contrib, err := h.contribService.SubmitDeposit(c.Request().Context(), org.ID, userID, isAdmin, &req)
 	if err != nil {
 		return response.BadRequest(c, err.Error())
 	}
 
+	if contrib.Status == domain.ContributionStatusApproved {
+		return response.Created(c, "Deposit recorded and approved successfully", contrib)
+	}
 	return response.Created(c, "Deposit submitted successfully and is pending admin verification", contrib)
 }
 

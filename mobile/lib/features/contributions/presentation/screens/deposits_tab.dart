@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../auth/presentation/bloc/auth_cubit.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
 import '../../data/models/contribution_model.dart';
 import '../../data/repositories/contribution_repository.dart';
 import '../../../dashboard/data/repositories/dashboard_repository.dart';
+import '../../../organization/data/models/organization_model.dart';
+import '../../../organization/data/repositories/org_repository.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
 import '../widgets/submit_payment_bottom_sheet.dart';
 
@@ -56,10 +60,30 @@ class _DepositsTabState extends State<DepositsTab> {
   Future<void> _openDeposit() async {
     String cycle = 'Current';
     double amount = 1000;
+    double basePrice = 0;
+    String? currentUserId;
+    List<OrgMemberModel> members = const [];
+
+    final dashboardRepo = context.read<DashboardRepository>();
+    final authCubit = context.read<AuthCubit>();
+    final orgRepo = context.read<OrgRepository>();
+
     try {
-      final dashboard = await context.read<DashboardRepository>().getMemberDashboard(widget.orgSlug);
+      final dashboard = await dashboardRepo.getMemberDashboard(widget.orgSlug);
       cycle = dashboard.currentCycle;
       amount = dashboard.periodicFee;
+      basePrice = dashboard.basePricePerShare;
+
+      // Admins can record a deposit for any active member of the organization.
+      if (widget.isAdmin) {
+        final authState = authCubit.state;
+        if (authState is Authenticated) {
+          currentUserId = authState.user.id;
+        }
+        members = (await orgRepo.listMembers(widget.orgSlug))
+            .where((member) => member.status == 'active')
+            .toList();
+      }
     } catch (_) {}
     if (!mounted) return;
     await SubmitPaymentBottomSheet.show(
@@ -67,6 +91,9 @@ class _DepositsTabState extends State<DepositsTab> {
       orgSlug: widget.orgSlug,
       currentCycle: cycle,
       defaultAmount: amount,
+      members: members,
+      currentUserId: currentUserId,
+      basePricePerShare: basePrice,
       onSuccess: () {
         _load();
         widget.onRefreshShell();
@@ -152,7 +179,7 @@ class _DepositsTabState extends State<DepositsTab> {
             actions: [
               IconButton(
                 onPressed: _openDeposit,
-                tooltip: 'Submit deposit',
+                tooltip: widget.isAdmin ? 'Submit deposit for a member' : 'Submit deposit',
                 icon: const Icon(Icons.add_circle_outline_rounded, color: AppTheme.primaryNavy),
               ),
             ],

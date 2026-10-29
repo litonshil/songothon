@@ -72,6 +72,9 @@ type SubmitDepositRequest struct {
 	ReceiptURL    string           `json:"receipt_url,omitempty"`
 	TargetCycle   string           `json:"target_cycle" validate:"required"` // e.g. "2026-10" or "Q4-2026"
 	Notes         string           `json:"notes,omitempty"`
+	// UserID lets an organization admin submit a deposit on behalf of another member.
+	// It is ignored when omitted or equal to the authenticated user.
+	UserID *uuid.UUID `json:"user_id,omitempty"`
 }
 
 type ReviewDepositRequest struct {

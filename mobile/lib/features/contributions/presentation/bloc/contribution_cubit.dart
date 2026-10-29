@@ -15,8 +15,8 @@ class ContributionCubit extends Cubit<ContributionState> {
     required String trxId,
     required String senderAccount,
     required String targetCycle,
-    String? receiptUrl,
     String? notes,
+    String? userId,
   }) async {
     emit(ContributionSubmitting());
     try {
@@ -28,10 +28,17 @@ class ContributionCubit extends Cubit<ContributionState> {
         trxId: trxId,
         senderAccount: senderAccount,
         targetCycle: targetCycle,
-        receiptUrl: receiptUrl,
         notes: notes,
+        userId: userId,
       );
-      emit(ContributionSubmittedSuccess(contribution: contribution));
+      emit(
+        ContributionSubmittedSuccess(
+          contribution: contribution,
+          message: contribution.isApproved
+              ? 'Deposit recorded and approved.'
+              : 'Payment submitted successfully! Waiting for admin review.',
+        ),
+      );
     } catch (e) {
       emit(ContributionError(e.toString()));
     }

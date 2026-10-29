@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../auth/presentation/bloc/auth_cubit.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
 import '../../../contributions/presentation/widgets/submit_payment_bottom_sheet.dart';
 import '../../../dashboard/data/models/admin_dashboard_model.dart';
 import '../../../dashboard/data/models/member_dashboard_model.dart';
 import '../../../dashboard/data/repositories/dashboard_repository.dart';
+import '../../../organization/data/models/organization_model.dart';
+import '../../../organization/data/repositories/org_repository.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
 
 class DashboardTab extends StatefulWidget {
@@ -63,14 +67,35 @@ class _DashboardTabState extends State<DashboardTab> {
 
   String get _currency => _member?.currency ?? 'BDT';
 
-  void _openDeposit() {
+  Future<void> _openDeposit() async {
     final member = _member;
     if (member == null) return;
+
+    String? currentUserId;
+    List<OrgMemberModel> members = const [];
+    if (member.isAdmin) {
+      final authCubit = context.read<AuthCubit>();
+      final orgRepo = context.read<OrgRepository>();
+      final authState = authCubit.state;
+      if (authState is Authenticated) {
+        currentUserId = authState.user.id;
+      }
+      try {
+        members = (await orgRepo.listMembers(widget.orgSlug))
+            .where((item) => item.status == 'active')
+            .toList();
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
     SubmitPaymentBottomSheet.show(
       context,
       orgSlug: widget.orgSlug,
       currentCycle: member.currentCycle,
       defaultAmount: member.periodicFee,
+      members: members,
+      currentUserId: currentUserId,
+      basePricePerShare: member.basePricePerShare,
       onSuccess: () {
         _load();
         widget.onRefreshShell();

@@ -15,8 +15,8 @@ class ContributionRepository {
     required String trxId,
     required String senderAccount,
     required String targetCycle,
-    String? receiptUrl,
     String? notes,
+    String? userId,
   }) async {
     try {
       final response = await apiClient.dio.post(
@@ -28,8 +28,9 @@ class ContributionRepository {
           'trx_id': trxId.trim(),
           'sender_account': senderAccount.trim(),
           'target_cycle': targetCycle.trim(),
-          if (receiptUrl != null && receiptUrl.isNotEmpty) 'receipt_url': receiptUrl.trim(),
           if (notes != null && notes.isNotEmpty) 'notes': notes.trim(),
+          // Admins may submit on behalf of another member.
+          if (userId != null && userId.isNotEmpty) 'user_id': userId,
         },
       );
 

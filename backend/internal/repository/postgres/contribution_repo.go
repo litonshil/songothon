@@ -20,6 +20,12 @@ func NewContributionRepository(db *DB) *ContributionRepository {
 }
 
 func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribution) error {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Check for existing non-rejected TrxID in the same org
 	var existingID uuid.UUID
 	checkQuery := `
@@ -27,7 +33,7 @@ func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribut
 		WHERE org_id = $1 AND LOWER(trx_id) = LOWER($2) AND status != 'REJECTED' AND deleted_at IS NULL
 		LIMIT 1
 	`
-	err := r.db.Pool.QueryRow(ctx, checkQuery, c.OrgID, c.TrxID).Scan(&existingID)
+	err = tx.QueryRow(ctx, checkQuery, c.OrgID, c.TrxID).Scan(&existingID)
 	if err == nil {
 		return fmt.Errorf("transaction ID '%s' has already been submitted for this organization", c.TrxID)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -47,17 +53,32 @@ func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribut
 	query := `
 		INSERT INTO contributions (
 			id, org_id, user_id, type, amount, payment_method, trx_id, sender_account,
-			receipt_url, target_cycle, status, notes, paid_at, created_at, updated_at
+			receipt_url, target_cycle, status, notes, paid_at, reviewed_by, reviewed_at, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8,
-			$9, $10, $11, $12, $13, NOW(), NOW()
+			$9, $10, $11, $12, $13, $14, $15, NOW(), NOW()
 		)
 		RETURNING created_at, updated_at
 	`
-	return r.db.Pool.QueryRow(ctx, query,
+	err = tx.QueryRow(ctx, query,
 		c.ID, c.OrgID, c.UserID, c.Type, c.Amount, c.PaymentMethod, c.TrxID, c.SenderAccount,
-		c.ReceiptURL, c.TargetCycle, c.Status, c.Notes, c.PaidAt,
+		c.ReceiptURL, c.TargetCycle, c.Status, c.Notes, c.PaidAt, c.ReviewedBy, c.ReviewedAt,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to create contribution: %w", err)
+	}
+
+	// Deposits submitted by an admin are auto-approved and must hit the ledger immediately.
+	if c.Status == domain.ContributionStatusApproved {
+		if c.ReviewedBy == nil {
+			return errors.New("approved deposit must have a reviewer")
+		}
+		if err := insertDepositLedgerEntry(ctx, tx, c.OrgID, c.ID, *c.ReviewedBy, c.Amount, c.TargetCycle); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *ContributionRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.ContributionDetail, error) {
@@ -220,15 +241,8 @@ func (r *ContributionRepository) ApproveDeposit(ctx context.Context, id, reviewe
 		return nil, fmt.Errorf("failed to approve deposit: %w", err)
 	}
 
-	// Insert into financial ledger transactions
-	ledgerQuery := `
-		INSERT INTO transactions (id, org_id, type, amount, flow, reference_table, reference_id, recorded_by, description, created_at)
-		VALUES ($1, $2, 'deposit', $3, 'inflow', 'contributions', $4, $5, $6, NOW())
-	`
-	desc := fmt.Sprintf("Approved member deposit for cycle %s", targetCycle)
-	_, err = tx.Exec(ctx, ledgerQuery, uuid.New(), orgID, amount, id, reviewerID, desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to record ledger transaction: %w", err)
+	if err := insertDepositLedgerEntry(ctx, tx, orgID, id, reviewerID, amount, targetCycle); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -236,6 +250,19 @@ func (r *ContributionRepository) ApproveDeposit(ctx context.Context, id, reviewe
 	}
 
 	return r.GetByID(ctx, id)
+}
+
+func insertDepositLedgerEntry(ctx context.Context, tx pgx.Tx, orgID, contributionID, reviewerID uuid.UUID, amount float64, targetCycle string) error {
+	ledgerQuery := `
+		INSERT INTO transactions (id, org_id, type, amount, flow, reference_table, reference_id, recorded_by, description, created_at)
+		VALUES ($1, $2, 'deposit', $3, 'inflow', 'contributions', $4, $5, $6, NOW())
+	`
+	desc := fmt.Sprintf("Approved member deposit for cycle %s", targetCycle)
+	_, err := tx.Exec(ctx, ledgerQuery, uuid.New(), orgID, amount, contributionID, reviewerID, desc)
+	if err != nil {
+		return fmt.Errorf("failed to record ledger transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *ContributionRepository) RejectDeposit(ctx context.Context, id, reviewerID uuid.UUID, reason string) (*domain.ContributionDetail, error) {

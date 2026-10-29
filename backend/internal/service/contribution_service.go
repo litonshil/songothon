@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"songothon/internal/domain"
@@ -34,9 +35,32 @@ func NewContributionService(
 
 func (s *ContributionService) SubmitDeposit(
 	ctx context.Context,
-	orgID, userID uuid.UUID,
+	orgID, actorID uuid.UUID,
+	isAdmin bool,
 	req *domain.SubmitDepositRequest,
 ) (*domain.Contribution, error) {
+	targetUserID := actorID
+
+	// Organization admins may submit a deposit on behalf of another member.
+	if req.UserID != nil && *req.UserID != uuid.Nil && *req.UserID != actorID {
+		if !isAdmin {
+			return nil, errors.New("only organization admins can submit a deposit on behalf of another member")
+		}
+
+		member, err := s.orgRepo.GetMember(ctx, orgID, *req.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify member: %w", err)
+		}
+		if member == nil {
+			return nil, errors.New("selected member does not belong to this organization")
+		}
+		if member.Status != domain.MemberStatusActive {
+			return nil, errors.New("deposits can only be submitted for active members")
+		}
+
+		targetUserID = *req.UserID
+	}
+
 	trxID := strings.TrimSpace(req.TrxID)
 	if trxID == "" {
 		return nil, errors.New("transaction ID (trx_id) is required")
@@ -56,9 +80,10 @@ func (s *ContributionService) SubmitDeposit(
 		return nil, errors.New("target deposit cycle is required")
 	}
 
+	// Deposits recorded by an organization admin need no further review.
 	contrib := &domain.Contribution{
 		OrgID:         orgID,
-		UserID:        userID,
+		UserID:        targetUserID,
 		Type:          req.Type,
 		Amount:        req.Amount,
 		PaymentMethod: req.PaymentMethod,
@@ -69,6 +94,12 @@ func (s *ContributionService) SubmitDeposit(
 		Status:        domain.ContributionStatusPending,
 		Notes:         req.Notes,
 	}
+	if isAdmin {
+		now := time.Now()
+		contrib.Status = domain.ContributionStatusApproved
+		contrib.ReviewedBy = &actorID
+		contrib.ReviewedAt = &now
+	}
 
 	if err := s.contribRepo.Create(ctx, contrib); err != nil {
 		return nil, err
@@ -76,7 +107,7 @@ func (s *ContributionService) SubmitDeposit(
 
 	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
 		OrgID:      &orgID,
-		UserID:     &userID,
+		UserID:     &actorID,
 		Action:     "SUBMIT_DEPOSIT",
 		EntityType: "contributions",
 		EntityID:   &contrib.ID,
@@ -85,8 +116,30 @@ func (s *ContributionService) SubmitDeposit(
 			"trx_id":         trxID,
 			"target_cycle":   targetCycle,
 			"payment_method": req.PaymentMethod,
+			"member_id":      targetUserID.String(),
+			"submitted_by":   actorID.String(),
+			"on_behalf":      targetUserID != actorID,
+			"auto_approved":  isAdmin,
 		},
 	})
+
+	if isAdmin && targetUserID != actorID {
+		org, _ := s.orgRepo.GetByID(ctx, orgID)
+		currency := "BDT"
+		if org != nil && org.Currency != "" {
+			currency = org.Currency
+		}
+
+		title := "Deposit Approved! 🎉"
+		body := fmt.Sprintf("A payment of %s %.2f for cycle %s has been recorded and added to your savings.", currency, contrib.Amount, contrib.TargetCycle)
+		_ = s.notifService.SendToUser(ctx, &orgID, targetUserID, title, body, "deposit_approved", map[string]string{
+			"org_id":          orgID.String(),
+			"contribution_id": contrib.ID.String(),
+			"status":          "APPROVED",
+			"amount":          fmt.Sprintf("%.2f", contrib.Amount),
+			"cycle":           contrib.TargetCycle,
+		})
+	}
 
 	return contrib, nil
 }

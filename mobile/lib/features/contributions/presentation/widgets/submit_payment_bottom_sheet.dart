@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../organization/data/models/organization_model.dart';
 import '../bloc/contribution_cubit.dart';
 import '../bloc/contribution_state.dart';
 
@@ -10,12 +11,20 @@ class SubmitPaymentBottomSheet extends StatefulWidget {
   final double defaultAmount;
   final VoidCallback? onSuccess;
 
+  /// When provided, the logged-in admin can submit the deposit for one of these members.
+  final List<OrgMemberModel> members;
+  final String? currentUserId;
+  final double basePricePerShare;
+
   const SubmitPaymentBottomSheet({
     super.key,
     required this.orgSlug,
     required this.currentCycle,
     this.defaultAmount = 1000.0,
     this.onSuccess,
+    this.members = const [],
+    this.currentUserId,
+    this.basePricePerShare = 0,
   });
 
   static Future<void> show(
@@ -24,6 +33,9 @@ class SubmitPaymentBottomSheet extends StatefulWidget {
     required String currentCycle,
     double defaultAmount = 1000.0,
     VoidCallback? onSuccess,
+    List<OrgMemberModel> members = const [],
+    String? currentUserId,
+    double basePricePerShare = 0,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -36,6 +48,9 @@ class SubmitPaymentBottomSheet extends StatefulWidget {
           currentCycle: currentCycle,
           defaultAmount: defaultAmount,
           onSuccess: onSuccess,
+          members: members,
+          currentUserId: currentUserId,
+          basePricePerShare: basePricePerShare,
         ),
       ),
     );
@@ -50,13 +65,13 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
 
   String _selectedMethod = 'bkash';
   String _selectedType = 'share_installment';
+  String? _selectedUserId;
   late final TextEditingController _amountController;
   late final TextEditingController _senderController;
   late final TextEditingController _trxIdController;
   late final TextEditingController _cycleController;
   late DateTime _cycle;
   late final TextEditingController _notesController;
-  late final TextEditingController _receiptController;
 
   final List<Map<String, String>> _paymentMethods = [
     {'id': 'bkash', 'name': 'bKash (বিকাশ)', 'icon': '📱'},
@@ -75,7 +90,40 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
     _cycle = DateTime.now();
     _cycleController = TextEditingController(text: _formatCycle(_cycle));
     _notesController = TextEditingController();
-    _receiptController = TextEditingController();
+
+    if (widget.members.isNotEmpty) {
+      final selected = widget.members.firstWhere(
+        (member) => member.userId == widget.currentUserId,
+        orElse: () => widget.members.first,
+      );
+      _selectedUserId = selected.userId;
+      _applyMemberDue(selected);
+    }
+  }
+
+  bool get _canSubmitForOthers => widget.members.isNotEmpty;
+
+  void _applyMemberDue(OrgMemberModel member) {
+    final shares = member.sharesCount ?? 0;
+    if (widget.basePricePerShare > 0 && shares > 0) {
+      _amountController.text = (widget.basePricePerShare * shares).toStringAsFixed(0);
+    }
+  }
+
+  void _onMemberChanged(String? userId) {
+    setState(() {
+      _selectedUserId = userId;
+      if (userId != null) {
+        final member = widget.members.firstWhere((m) => m.userId == userId);
+        _applyMemberDue(member);
+      }
+    });
+  }
+
+  String _memberLabel(OrgMemberModel member) {
+    final name = member.fullName.isNotEmpty ? member.fullName : member.email;
+    final suffix = member.userId == widget.currentUserId ? ' (You)' : '';
+    return '$name$suffix';
   }
 
   @override
@@ -85,7 +133,6 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
     _trxIdController.dispose();
     _cycleController.dispose();
     _notesController.dispose();
-    _receiptController.dispose();
     super.dispose();
   }
 
@@ -118,8 +165,8 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
           trxId: _trxIdController.text.trim(),
           senderAccount: _senderController.text.trim(),
           targetCycle: _cycleController.text.trim(),
-          receiptUrl: _receiptController.text.trim().isEmpty ? null : _receiptController.text.trim(),
           notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+          userId: _selectedUserId,
         );
   }
 
@@ -195,16 +242,18 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Submit Deposit',
-                            style: TextStyle(
+                          Text(
+                            _canSubmitForOthers ? 'Submit Member Deposit' : 'Submit Deposit',
+                            style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF1E293B),
                             ),
                           ),
                           Text(
-                            'Cycle: ${widget.currentCycle}',
+                            _canSubmitForOthers
+                                ? 'Record a deposit on behalf of a member'
+                                : 'Cycle: ${widget.currentCycle}',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey.shade600,
@@ -219,6 +268,33 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                     ],
                   ),
                   const Divider(height: 24),
+
+                  // Member selector (organization admins only)
+                  if (_canSubmitForOthers) ...[
+                    const Text(
+                      'Deposit For',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedUserId,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      items: widget.members.map((member) {
+                        return DropdownMenuItem<String>(
+                          value: member.userId,
+                          child: Text(_memberLabel(member), overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: isSubmitting ? null : _onMemberChanged,
+                      validator: (value) => value == null ? 'Please select a member' : null,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Deposit Type
                   const Text(
@@ -283,12 +359,13 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                   // Amount
                   TextFormField(
                     controller: _amountController,
-                    readOnly: true,
-                    enableInteractiveSelection: false,
+                    readOnly: !_canSubmitForOthers,
+                    enableInteractiveSelection: _canSubmitForOthers,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     decoration: InputDecoration(
                       labelText: 'Amount (BDT)',
                       prefixText: '৳ ',
-                      filled: true,
+                      filled: !_canSubmitForOthers,
                       fillColor: Colors.grey.shade100,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -379,21 +456,6 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Optional Receipt Link
-                  TextFormField(
-                    controller: _receiptController,
-                    enabled: !isSubmitting,
-                    keyboardType: TextInputType.url,
-                    decoration: InputDecoration(
-                      labelText: 'Receipt / Screenshot Link (Optional)',
-                      hintText: 'Paste a link to your payment screenshot',
-                      prefixIcon: const Icon(Icons.link_rounded, size: 20),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
                   // Optional Notes
                   TextFormField(
                     controller: _notesController,
@@ -424,8 +486,8 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
-                        : const Text(
-                            'Submit for Verification',
+                        : Text(
+                            _canSubmitForOthers ? 'Record Deposit' : 'Submit for Verification',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                   ),
