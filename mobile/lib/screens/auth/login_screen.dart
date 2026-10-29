@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../core/api/api_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/auth/presentation/bloc/auth_cubit.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
@@ -27,13 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _fillCredentials(String email, String password) {
-    setState(() {
-      _emailController.text = email;
-      _passwordController.text = password;
-    });
-  }
-
   void _submit() {
     if (_formKey.currentState?.validate() ?? false) {
       context.read<AuthCubit>().login(
@@ -41,73 +33,6 @@ class _LoginScreenState extends State<LoginScreen> {
             _passwordController.text,
           );
     }
-  }
-
-  void _showServerSettingsDialog() {
-    final controller = TextEditingController(text: ApiConstants.baseUrl);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('API Server Endpoint', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select or enter backend endpoint for USB device (ADB reverse), emulator, or Wi-Fi:',
-              style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Base URL',
-                hintText: 'http://127.0.0.1:8080/api/v1',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                ActionChip(
-                  label: const Text('USB Device (127.0.0.1)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => controller.text = 'http://127.0.0.1:8080/api/v1',
-                ),
-                ActionChip(
-                  label: const Text('Emulator (10.0.2.2)', style: TextStyle(fontSize: 11)),
-                  onPressed: () => controller.text = 'http://10.0.2.2:8080/api/v1',
-                ),
-                ActionChip(
-                  label: const Text('Wi-Fi LAN', style: TextStyle(fontSize: 11)),
-                  onPressed: () => controller.text = 'http://192.168.0.109:8080/api/v1',
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              ApiConstants.setBaseUrl(controller.text.trim());
-              Navigator.pop(ctx);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('API URL set to: ${ApiConstants.baseUrl}'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -137,16 +62,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Top settings gear
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: IconButton(
-                          icon: const Icon(Icons.settings_ethernet_rounded, color: AppTheme.textMuted, size: 22),
-                          tooltip: 'API Server Endpoint',
-                          onPressed: _showServerSettingsDialog,
-                        ),
-                      ),
-
                       // Branding Icon & Title
                       Center(
                         child: Container(
@@ -267,41 +182,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           side: const BorderSide(color: AppTheme.borderLight),
                         ),
                         child: const Text('Create a new account'),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Quick Demo Account Selectors
-                      const Divider(),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'DEMO QUICK-LOGIN',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                          color: AppTheme.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () => _fillCredentials('admin@songothon.org', 'Password123!'),
-                              icon: const Icon(Icons.admin_panel_settings, size: 16, color: AppTheme.primaryNavy),
-                              label: const Text('Admin', style: TextStyle(fontSize: 12)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () => _fillCredentials('alice@songothon.org', 'Password123!'),
-                              icon: const Icon(Icons.person, size: 16, color: AppTheme.accentGreen),
-                              label: const Text('Member', style: TextStyle(fontSize: 12)),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),

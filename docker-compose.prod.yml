@@ -7,7 +7,7 @@ services:
     restart: always
     command: agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0 -data-dir=/consul/data
     ports:
-      - "8600:8500"
+      - "8800:8500"
     volumes:
       - songothon_consul:/consul/data:rw
     networks:
@@ -18,13 +18,13 @@ services:
     image: postgres:15-alpine
     restart: always
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - songothon_db:/var/lib/postgresql/data:rw
     environment:
-      - POSTGRES_DB=songothon
+      - POSTGRES_DB=songothon_db
       - POSTGRES_USER=song_user
-      - POSTGRES_PASSWORD=song@009
+      - POSTGRES_PASSWORD=song009
     tty: true
     networks:
       - songothon_networks
@@ -34,7 +34,7 @@ services:
     container_name: songothon_redis
     restart: always
     ports:
-      - "6380:6379"
+      - "6381:6379"
     command: redis-server --requirepass password123
     volumes:
       - songothon_cache:/data:rw
@@ -43,10 +43,10 @@ services:
 
   backend:
     container_name: songothon_api
-    image: ghcr.io/litonshil/songothon-be:${IMAGE_TAG:-latest}
+    image: ghcr.io/litonshil/songothon-be:v1.0.0
     restart: always
     ports:
-      - "8080:8080"
+      - "8084:8080"
     command: serve
     environment:
       - CONSUL_URL=http://songothon_consul:8500

@@ -14,8 +14,15 @@ class ApiConstants {
   static String get defaultBaseUrl {
     if (kIsWeb) return 'http://localhost:8080/api/v1';
     if (Platform.isAndroid) {
+      // Use prod for release builds, localhost for debug/dev
+      if (kReleaseMode) {
+        return 'http://104.247.110.13:8084/api/v1';
+      }
       // 127.0.0.1 with 'adb reverse tcp:8080 tcp:8080' for USB device testing
       return 'http://127.0.0.1:8080/api/v1';
+    }
+    if (kReleaseMode) {
+      return 'http://104.247.110.13:8084/api/v1';
     }
     return 'http://localhost:8080/api/v1';
   }
