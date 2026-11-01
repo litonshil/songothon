@@ -28,7 +28,12 @@ class _AppShellState extends State<AppShell> {
 
   void _switchOrg() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => SelectOrCreateOrgScreen(orgRepository: context.read<OrgRepository>())),
+      MaterialPageRoute(
+        builder: (_) => SelectOrCreateOrgScreen(
+          orgRepository: context.read<OrgRepository>(),
+          autoOpenSingleOrg: false,
+        ),
+      ),
       (route) => false,
     );
   }

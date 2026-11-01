@@ -25,7 +25,15 @@ String? validateOrgSlug(String slug) {
 class SelectOrCreateOrgScreen extends StatefulWidget {
   final OrgRepository orgRepository;
 
-  const SelectOrCreateOrgScreen({super.key, required this.orgRepository});
+  /// When true, a user with exactly one active membership is taken straight
+  /// into it. Disabled when the user explicitly asks to switch organizations.
+  final bool autoOpenSingleOrg;
+
+  const SelectOrCreateOrgScreen({
+    super.key,
+    required this.orgRepository,
+    this.autoOpenSingleOrg = true,
+  });
 
   @override
   State<SelectOrCreateOrgScreen> createState() => _SelectOrCreateOrgScreenState();
@@ -39,7 +47,7 @@ class _SelectOrCreateOrgScreenState extends State<SelectOrCreateOrgScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOrgs();
+    _loadOrgs(autoOpen: widget.autoOpenSingleOrg);
   }
 
   Future<void> _loadOrgs({bool autoOpen = true}) async {
