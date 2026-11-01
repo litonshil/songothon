@@ -48,6 +48,17 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest)
 		return nil, errors.New("a user with this email address already exists")
 	}
 
+	req.Phone = strings.TrimSpace(req.Phone)
+	if req.Phone != "" {
+		existingUser, err = s.userRepo.GetByPhone(ctx, req.Phone)
+		if err != nil {
+			return nil, fmt.Errorf("database query error: %w", err)
+		}
+		if existingUser != nil {
+			return nil, errors.New("a user with this phone number already exists")
+		}
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -58,7 +69,7 @@ func (s *AuthService) Register(ctx context.Context, req *domain.RegisterRequest)
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
 		FullName:     strings.TrimSpace(req.FullName),
-		Phone:        strings.TrimSpace(req.Phone),
+		Phone:        req.Phone,
 		Status:       domain.UserStatusActive,
 	}
 

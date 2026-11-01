@@ -22,7 +22,7 @@ func NewUserRepository(db *DB) *UserRepository {
 func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 	query := `
 		INSERT INTO users (id, email, password_hash, full_name, phone, fcm_token, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
 	if u.ID == uuid.Nil {
@@ -44,7 +44,7 @@ func (r *UserRepository) Create(ctx context.Context, u *domain.User) error {
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone, COALESCE(fcm_token, ''), status, created_at, updated_at
+		SELECT id, email, password_hash, full_name, COALESCE(phone, ''), COALESCE(fcm_token, ''), status, created_at, updated_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -63,7 +63,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone, COALESCE(fcm_token, ''), status, created_at, updated_at
+		SELECT id, email, password_hash, full_name, COALESCE(phone, ''), COALESCE(fcm_token, ''), status, created_at, updated_at
 		FROM users
 		WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL
 	`
@@ -82,7 +82,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone, COALESCE(fcm_token, ''), status, created_at, updated_at
+		SELECT id, email, password_hash, full_name, COALESCE(phone, ''), COALESCE(fcm_token, ''), status, created_at, updated_at
 		FROM users
 		WHERE phone = $1 AND deleted_at IS NULL
 	`
@@ -113,7 +113,7 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, userID uuid.UUID, sta
 
 func (r *UserRepository) ListMembers(ctx context.Context, status string) ([]domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, full_name, phone, COALESCE(fcm_token, ''), status, created_at, updated_at
+		SELECT id, email, password_hash, full_name, COALESCE(phone, ''), COALESCE(fcm_token, ''), status, created_at, updated_at
 		FROM users
 		WHERE deleted_at IS NULL AND ($1 = '' OR status = $1)
 		ORDER BY full_name ASC

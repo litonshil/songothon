@@ -508,7 +508,7 @@ func (r *OrgRepository) AcceptPendingInvitations(ctx context.Context, user *doma
 		FROM organization_invitations
 		WHERE status = 'pending'
 		  AND ((email IS NOT NULL AND LOWER(email) = LOWER($1))
-		       OR (phone IS NOT NULL AND phone = $2))
+		       OR ($2 <> '' AND phone = $2))
 		FOR UPDATE
 	`
 	rows, err := tx.Query(ctx, query, user.Email, user.Phone)
