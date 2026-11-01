@@ -3,6 +3,11 @@ backend/config.prod.json
 backend/config.*.json
 !backend/config.local.json
 
+# Firebase service-account keys
+service-account*.json
+!service-account.json.example
+*-firebase-adminsdk-*.json
+
 # Dependencies
 vendor/
 

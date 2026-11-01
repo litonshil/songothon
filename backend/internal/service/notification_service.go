@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -52,6 +53,9 @@ func (s *NotificationService) SendToUser(
 		msgID, pushErr := s.fcmClient.SendPush(ctx, user.FCMToken, title, body, data)
 		if pushErr != nil {
 			log.Printf("[NotificationService] Warning: push notification delivery failed: %v\n", pushErr)
+			if errors.Is(pushErr, fcm.ErrInvalidToken) {
+				_ = s.userRepo.UpdateFCMToken(ctx, userID, "")
+			}
 		} else {
 			fcmMsgID = &msgID
 		}

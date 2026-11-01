@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "183667748218",
+    "project_id": "songothon-d969b",
+    "storage_bucket": "songothon-d969b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:183667748218:android:78a427eb46fb3f3f127ac3",
+        "android_client_info": {
+          "package_name": "org.songothon.songothon_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtvSogW9QIErBXBhSrQ5sjxc-aDylndjA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

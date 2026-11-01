@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/api/api_client.dart';
+import 'core/notifications/push_notification_service.dart';
 import 'core/storage/secure_storage_service.dart';
 import 'core/theme/app_theme.dart';
 
@@ -34,6 +35,8 @@ void main() async {
   // 1. Core Service Dependencies
   final storageService = SecureStorageService();
   final apiClient = ApiClient(storageService: storageService);
+  final pushService = PushNotificationService(apiClient: apiClient);
+  await pushService.init();
 
   // 2. Feature Clean Architecture Repositories
   final authRepository = AuthRepository(apiClient: apiClient, storageService: storageService);
@@ -47,6 +50,7 @@ void main() async {
 
   runApp(SongothonApp(
     storageService: storageService,
+    pushService: pushService,
     authRepository: authRepository,
     orgRepository: orgRepository,
     contributionRepository: contributionRepository,
@@ -60,6 +64,7 @@ void main() async {
 
 class SongothonApp extends StatelessWidget {
   final SecureStorageService storageService;
+  final PushNotificationService pushService;
   final AuthRepository authRepository;
   final OrgRepository orgRepository;
   final ContributionRepository contributionRepository;
@@ -72,6 +77,7 @@ class SongothonApp extends StatelessWidget {
   const SongothonApp({
     super.key,
     required this.storageService,
+    required this.pushService,
     required this.authRepository,
     required this.orgRepository,
     required this.contributionRepository,
@@ -111,11 +117,13 @@ class SongothonApp extends StatelessWidget {
         child: BlocListener<AuthCubit, AuthState>(
           listener: (context, state) {
             if (state is Unauthenticated) {
+              pushService.unregisterDevice();
               appNavigatorKey.currentState?.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (route) => false,
               );
             } else if (state is Authenticated) {
+              pushService.registerDevice();
               appNavigatorKey.currentState?.pushAndRemoveUntil(
                 MaterialPageRoute(
                   builder: (_) => SelectOrCreateOrgScreen(orgRepository: orgRepository),

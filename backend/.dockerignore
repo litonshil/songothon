@@ -3,3 +3,4 @@ bin
 api
 *.tmp
 config.local.json
+service-account*.json

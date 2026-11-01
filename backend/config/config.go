@@ -42,12 +42,23 @@ type DBConfig struct {
 }
 
 type FCMClient struct {
-	FCM *FCMConfig
+	FCM *FCMServiceAccount
 }
 
-type FCMConfig struct {
-	ServerKey string `mapstructure:"server_key"`
-	ProjectID string `mapstructure:"project_id"`
+// FCMServiceAccount holds the Firebase service-account key fields
+// (Project settings -> Service accounts -> Generate new private key).
+type FCMServiceAccount struct {
+	Type                    string `mapstructure:"type" json:"type"`
+	ProjectID               string `mapstructure:"project_id" json:"project_id"`
+	PrivateKeyID            string `mapstructure:"private_key_id" json:"private_key_id"`
+	PrivateKey              string `mapstructure:"private_key" json:"private_key"`
+	ClientEmail             string `mapstructure:"client_email" json:"client_email"`
+	ClientID                string `mapstructure:"client_id" json:"client_id"`
+	AuthURI                 string `mapstructure:"auth_uri" json:"auth_uri"`
+	TokenURI                string `mapstructure:"token_uri" json:"token_uri"`
+	AuthProviderX509CertURL string `mapstructure:"auth_provider_x509_cert_url" json:"auth_provider_x509_cert_url"`
+	ClientX509CertURL       string `mapstructure:"client_x509_cert_url" json:"client_x509_cert_url"`
+	UniverseDomain          string `mapstructure:"universe_domain" json:"universe_domain"`
 }
 
 func Get() Config {
@@ -135,6 +146,8 @@ func setDefaultConfig() {
 	viper.SetDefault("db.db.max_idle_conn", 5)
 	viper.SetDefault("db.db.max_open_conn", 25)
 
-	viper.SetDefault("fcm.fcm.server_key", "")
-	viper.SetDefault("fcm.fcm.project_id", "songothon-dev")
+	viper.SetDefault("fcm.fcm.type", "service_account")
+	viper.SetDefault("fcm.fcm.project_id", "")
+	viper.SetDefault("fcm.fcm.private_key", "")
+	viper.SetDefault("fcm.fcm.token_uri", "https://oauth2.googleapis.com/token")
 }

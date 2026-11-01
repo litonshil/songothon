@@ -58,7 +58,10 @@ func runServer(ctx context.Context) error {
 
 	// 2. Shared modules
 	tokenMgr := token.NewTokenManager(appCfg.JWTSecret, time.Duration(appCfg.JWTExpiryHours)*time.Hour, "songothon-api")
-	fcmClient := fcm.NewFCMClient(fcmCfg.ServerKey, fcmCfg.ProjectID)
+	fcmClient, err := fcm.NewFCMClient(ctx, fcm.ServiceAccount(*fcmCfg))
+	if err != nil {
+		return fmt.Errorf("failed to initialise FCM client: %w", err)
+	}
 
 	// 3. Services
 	notifService := service.NewNotificationService(notifRepo, userRepo, orgRepo, fcmClient)
