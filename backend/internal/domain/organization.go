@@ -98,6 +98,10 @@ type DownPaymentScheme struct {
 	IsActive   bool      `json:"is_active" db:"is_active"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+
+	// Computed when listing: billing periods to date and the current one.
+	AllPeriods    []SchemePeriod `json:"periods,omitempty" db:"-"`
+	CurrentPeriod *SchemePeriod  `json:"current_period,omitempty" db:"-"`
 }
 
 type OrganizationInvitation struct {

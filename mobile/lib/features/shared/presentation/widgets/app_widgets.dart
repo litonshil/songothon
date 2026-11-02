@@ -133,7 +133,7 @@ class StatusPill extends StatelessWidget {
       'paid' || 'approved' || 'active' => AppTheme.accentGreen,
       'pending' => AppTheme.warningOrange,
       'partially paid' => AppTheme.primaryBlue,
-      'unpaid' || 'rejected' || 'removed' || 'suspended' => AppTheme.errorRed,
+      'unpaid' || 'overdue' || 'rejected' || 'removed' || 'suspended' => AppTheme.errorRed,
       _ => AppTheme.textMuted,
     };
     final label = switch (normalized) {

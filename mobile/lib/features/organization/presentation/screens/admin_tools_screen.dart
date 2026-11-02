@@ -8,6 +8,7 @@ import '../../../notifications/data/repositories/notification_repository.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
 import '../../data/models/organization_model.dart';
 import '../../data/repositories/org_repository.dart';
+import 'down_payment_status_screen.dart';
 
 class AdminToolsScreen extends StatefulWidget {
   final String orgSlug;
@@ -203,6 +204,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
     final title = TextEditingController();
     final amount = TextEditingController();
     final startDate = TextEditingController(text: DateTime.now().toIso8601String().split('T').first);
+    final dueDate = TextEditingController();
     String type = 'mandatory';
     String frequency = 'one_time';
     final save = await showModalBottomSheet<bool>(
@@ -290,6 +292,26 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                     prefixIcon: Icon(Icons.calendar_today_outlined),
                   ),
                 ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: dueDate,
+                  decoration: InputDecoration(
+                    labelText: 'First due date (optional)',
+                    hintText: 'YYYY-MM-DD',
+                    helperText: frequency == 'one_time'
+                        ? 'Defaults to 30 days after the start date.'
+                        : 'Later periods repeat the same day in the same month of each period. '
+                            'Defaults to the last day of each period.',
+                    helperMaxLines: 3,
+                    prefixIcon: const Icon(Icons.event_available_outlined),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Every active member owes this flat amount for each period since the start date, '
+                  'including members who join later.',
+                  style: TextStyle(fontSize: 11.5, color: AppTheme.textMuted, height: 1.4),
+                ),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, true),
@@ -310,6 +332,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
         schemeType: type,
         frequency: frequency,
         startDate: startDate.text.trim(),
+        dueDate: dueDate.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Down payment scheme created.')));
@@ -657,9 +680,10 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                             child: Icon(Icons.account_balance_outlined, size: 18, color: AppTheme.darkGreen),
                           ),
                           title: item.title,
-                          subtitle: '${formatMoney(item.amount)} • ${humanize(item.schemeType)} • ${humanize(item.frequency)}',
-                          trailing: StatusPill(label: item.isActive ? 'Active' : 'Inactive',
-                              color: item.isActive ? AppTheme.accentGreen : AppTheme.textMuted),
+                          subtitle: '${formatMoney(item.amount)} • ${humanize(item.schemeType)} • ${humanize(item.frequency)}'
+                              '${item.currentPeriod != null ? '\n${item.currentPeriod!.label} • due ${item.currentPeriod!.dueDate}' : ''}',
+                          trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+                          onTap: () => DownPaymentStatusScreen.open(context, orgSlug: widget.orgSlug, scheme: item),
                         ),
                       )),
                     const SizedBox(height: 20),

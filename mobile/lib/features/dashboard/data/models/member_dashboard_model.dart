@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../../organization/data/models/organization_model.dart';
 
 class PeerMemberOverviewModel extends Equatable {
   final String userId;
@@ -39,23 +40,35 @@ class DownPaymentStatusModel extends Equatable {
   final String schemeId;
   final String title;
   final double amount;
+  final String schemeType;
   final String frequency;
   final String? startDate;
   final String? dueDate;
-  final String status;
+  final SchemePeriodModel? currentPeriod;
+  final String status; // current period: Paid, Partially Paid, Pending, Unpaid
   final double paidAmount;
   final double pendingAmount;
+  final double amountDue; // still owed for the current period
+  final bool isOverdue;
+  final double outstandingAmount; // all periods to date
+  final List<String> unpaidPeriods;
 
   const DownPaymentStatusModel({
     required this.schemeId,
     required this.title,
     required this.amount,
+    this.schemeType = 'mandatory',
     required this.frequency,
     this.startDate,
     this.dueDate,
+    this.currentPeriod,
     required this.status,
     required this.paidAmount,
     required this.pendingAmount,
+    this.amountDue = 0,
+    this.isOverdue = false,
+    this.outstandingAmount = 0,
+    this.unpaidPeriods = const [],
   });
 
   factory DownPaymentStatusModel.fromJson(Map<String, dynamic> json) {
@@ -63,17 +76,26 @@ class DownPaymentStatusModel extends Equatable {
       schemeId: json['scheme_id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      schemeType: json['scheme_type']?.toString() ?? 'mandatory',
       frequency: json['frequency']?.toString() ?? 'one_time',
       startDate: json['start_date']?.toString(),
       dueDate: json['due_date']?.toString(),
+      currentPeriod: SchemePeriodModel.tryParse(json['current_period']),
       status: json['status']?.toString() ?? 'Unpaid',
       paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? 0.0,
       pendingAmount: (json['pending_amount'] as num?)?.toDouble() ?? 0.0,
+      amountDue: (json['amount_due'] as num?)?.toDouble() ?? 0.0,
+      isOverdue: json['is_overdue'] == true,
+      outstandingAmount: (json['outstanding_amount'] as num?)?.toDouble() ?? 0.0,
+      unpaidPeriods: (json['unpaid_periods'] as List? ?? []).map((e) => e.toString()).toList(),
     );
   }
 
   @override
-  List<Object?> get props => [schemeId, title, amount, frequency, startDate, dueDate, status, paidAmount, pendingAmount];
+  List<Object?> get props => [
+        schemeId, title, amount, schemeType, frequency, startDate, dueDate, currentPeriod,
+        status, paidAmount, pendingAmount, amountDue, isOverdue, outstandingAmount, unpaidPeriods,
+      ];
 }
 
 class MemberDashboardModel extends Equatable {

@@ -17,15 +17,59 @@ type PeerMemberOverview struct {
 }
 
 type MemberDownPaymentStatus struct {
-	SchemeID      uuid.UUID `json:"scheme_id"`
-	Title         string    `json:"title"`
-	Amount        float64   `json:"amount"`
-	Frequency     string    `json:"frequency"`
-	StartDate     *string   `json:"start_date,omitempty"`
-	DueDate       *string   `json:"due_date,omitempty"`
-	Status        string    `json:"status"` // Paid, Pending, Unpaid
-	PaidAmount    float64   `json:"paid_amount"`
-	PendingAmount float64   `json:"pending_amount"`
+	SchemeID   uuid.UUID `json:"scheme_id"`
+	Title      string    `json:"title"`
+	Amount     float64   `json:"amount"` // flat amount per member per period
+	SchemeType string    `json:"scheme_type"`
+	Frequency  string    `json:"frequency"`
+	StartDate  *string   `json:"start_date,omitempty"`
+	DueDate    *string   `json:"due_date,omitempty"`
+
+	// Current period
+	CurrentPeriod SchemePeriod `json:"current_period"`
+	Status        string       `json:"status"` // Paid, Partially Paid, Pending, Unpaid
+	PaidAmount    float64      `json:"paid_amount"`
+	PendingAmount float64      `json:"pending_amount"` // submitted, awaiting admin review
+	AmountDue     float64      `json:"amount_due"`     // still owed for the current period
+	IsOverdue     bool         `json:"is_overdue"`
+
+	// All periods to date (including the current one)
+	OutstandingAmount float64  `json:"outstanding_amount"`
+	UnpaidPeriods     []string `json:"unpaid_periods"`
+}
+
+// SchemeMemberStatus is one member's standing for a scheme period (admin view).
+type SchemeMemberStatus struct {
+	UserID            uuid.UUID `json:"user_id"`
+	FullName          string    `json:"full_name"`
+	Email             string    `json:"email"`
+	PaidAmount        float64   `json:"paid_amount"`
+	PendingAmount     float64   `json:"pending_amount"`
+	AmountDue         float64   `json:"amount_due"`
+	Status            string    `json:"status"`
+	OutstandingAmount float64   `json:"outstanding_amount"` // all periods to date
+}
+
+type SchemePeriodReport struct {
+	Scheme          DownPaymentScheme    `json:"scheme"`
+	Period          SchemePeriod         `json:"period"`
+	IsOverdue       bool                 `json:"is_overdue"`
+	ExpectedAmount  float64              `json:"expected_amount"`
+	CollectedAmount float64              `json:"collected_amount"`
+	PendingAmount   float64              `json:"pending_amount"`
+	PaidCount       int                  `json:"paid_count"`
+	PartialCount    int                  `json:"partial_count"`
+	UnpaidCount     int                  `json:"unpaid_count"`
+	Members         []SchemeMemberStatus `json:"members"`
+}
+
+// SchemePaymentTotal is the approved/pending sum for one member, scheme and period.
+type SchemePaymentTotal struct {
+	SchemeID uuid.UUID
+	UserID   uuid.UUID
+	Period   string
+	Approved float64
+	Pending  float64
 }
 
 type MemberDashboardData struct {

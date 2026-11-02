@@ -108,16 +108,16 @@ func insertContribution(ctx context.Context, tx pgx.Tx, c *domain.Contribution) 
 	query := `
 		INSERT INTO contributions (
 			id, org_id, user_id, type, amount, payment_method, trx_id, sender_account,
-			receipt_url, target_cycle, status, notes, paid_at, reviewed_by, reviewed_at, created_at, updated_at
+			receipt_url, target_cycle, status, notes, paid_at, reviewed_by, reviewed_at, scheme_id, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8,
-			$9, $10, $11, $12, $13, $14, $15, NOW(), NOW()
+			$9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW()
 		)
 		RETURNING created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, query,
 		c.ID, c.OrgID, c.UserID, c.Type, c.Amount, c.PaymentMethod, c.TrxID, c.SenderAccount,
-		c.ReceiptURL, c.TargetCycle, c.Status, c.Notes, c.PaidAt, c.ReviewedBy, c.ReviewedAt,
+		c.ReceiptURL, c.TargetCycle, c.Status, c.Notes, c.PaidAt, c.ReviewedBy, c.ReviewedAt, c.SchemeID,
 	).Scan(&c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create contribution: %w", err)
@@ -455,14 +455,34 @@ func (r *ContributionRepository) ListCycleMemberTotals(ctx context.Context, orgI
 	return list, rows.Err()
 }
 
-func (r *ContributionRepository) GetMemberTargetTotals(ctx context.Context, orgID, userID uuid.UUID, contributionType domain.ContributionType, target string) (approved, pending float64, err error) {
+// ListSchemeTotals sums approved and pending down payments per scheme, member
+// and period. schemeID / userID narrow the result when non-nil.
+func (r *ContributionRepository) ListSchemeTotals(ctx context.Context, orgID uuid.UUID, schemeID, userID *uuid.UUID) ([]domain.SchemePaymentTotal, error) {
 	query := `
 		SELECT
-			COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN amount ELSE 0 END), 0.0),
-			COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0.0)
+			scheme_id, user_id, target_cycle,
+			COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN amount ELSE 0 END), 0.0)::float8,
+			COALESCE(SUM(CASE WHEN status = 'PENDING' THEN amount ELSE 0 END), 0.0)::float8
 		FROM contributions
-		WHERE org_id = $1 AND user_id = $2 AND type = $3 AND target_cycle = $4 AND deleted_at IS NULL
+		WHERE org_id = $1 AND scheme_id IS NOT NULL AND type = 'down_payment'
+		  AND status IN ('APPROVED', 'PENDING') AND deleted_at IS NULL
+		  AND ($2::uuid IS NULL OR scheme_id = $2)
+		  AND ($3::uuid IS NULL OR user_id = $3)
+		GROUP BY scheme_id, user_id, target_cycle
 	`
-	err = r.db.Pool.QueryRow(ctx, query, orgID, userID, contributionType, target).Scan(&approved, &pending)
-	return approved, pending, err
+	rows, err := r.db.Pool.Query(ctx, query, orgID, schemeID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load down payment totals: %w", err)
+	}
+	defer rows.Close()
+
+	var list []domain.SchemePaymentTotal
+	for rows.Next() {
+		var t domain.SchemePaymentTotal
+		if err := rows.Scan(&t.SchemeID, &t.UserID, &t.Period, &t.Approved, &t.Pending); err != nil {
+			return nil, err
+		}
+		list = append(list, t)
+	}
+	return list, rows.Err()
 }

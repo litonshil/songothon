@@ -76,8 +76,34 @@ func (s *ContributionService) SubmitDeposit(
 	}
 
 	targetCycle := strings.TrimSpace(req.TargetCycle)
-	if targetCycle == "" {
-		return nil, errors.New("target deposit cycle is required")
+	var schemeID *uuid.UUID
+	var scheme *domain.DownPaymentScheme
+
+	switch req.Type {
+	case domain.ContributionTypeDownPayment:
+		if req.SchemeID == nil || *req.SchemeID == uuid.Nil {
+			return nil, errors.New("select the down payment scheme this deposit is for")
+		}
+		var err error
+		scheme, err = s.orgRepo.GetDownPaymentScheme(ctx, orgID, *req.SchemeID)
+		if err != nil {
+			return nil, err
+		}
+		if scheme == nil || !scheme.IsActive {
+			return nil, errors.New("down payment scheme not found or no longer active")
+		}
+		if targetCycle == "" {
+			targetCycle = scheme.PeriodAt(time.Now()).Key
+		} else if !scheme.ValidPeriodKey(targetCycle) {
+			return nil, fmt.Errorf("invalid period %q for a %s scheme", targetCycle, strings.ReplaceAll(scheme.Frequency, "_", "-"))
+		}
+		schemeID = &scheme.ID
+	case domain.ContributionTypeShareInstallment, domain.ContributionTypeAdHoc:
+		if targetCycle == "" {
+			return nil, errors.New("target deposit cycle is required")
+		}
+	default:
+		return nil, errors.New("invalid deposit type")
 	}
 
 	// Deposits recorded by an organization admin need no further review.
@@ -91,6 +117,7 @@ func (s *ContributionService) SubmitDeposit(
 		SenderAccount: senderAccount,
 		ReceiptURL:    req.ReceiptURL,
 		TargetCycle:   targetCycle,
+		SchemeID:      schemeID,
 		Status:        domain.ContributionStatusPending,
 		Notes:         req.Notes,
 	}
@@ -120,6 +147,7 @@ func (s *ContributionService) SubmitDeposit(
 			"submitted_by":   actorID.String(),
 			"on_behalf":      targetUserID != actorID,
 			"auto_approved":  isAdmin,
+			"scheme_id":      schemeID,
 		},
 	})
 
@@ -131,7 +159,11 @@ func (s *ContributionService) SubmitDeposit(
 		}
 
 		title := "Deposit Approved! 🎉"
-		body := fmt.Sprintf("A payment of %s %.2f for cycle %s has been recorded and added to your savings.", currency, contrib.Amount, contrib.TargetCycle)
+		forWhat := "cycle " + contrib.TargetCycle
+		if scheme != nil {
+			forWhat = fmt.Sprintf("%s (%s)", scheme.Title, scheme.Period(contrib.TargetCycle).Label)
+		}
+		body := fmt.Sprintf("A payment of %s %.2f for %s has been recorded and added to your savings.", currency, contrib.Amount, forWhat)
 		_ = s.notifService.SendToUser(ctx, &orgID, targetUserID, title, body, "deposit_approved", map[string]string{
 			"org_id":          orgID.String(),
 			"contribution_id": contrib.ID.String(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../organization/data/models/organization_model.dart';
+import '../../../organization/data/repositories/org_repository.dart';
 import '../bloc/contribution_cubit.dart';
 import '../bloc/contribution_state.dart';
 
@@ -73,6 +74,12 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
   late DateTime _cycle;
   late final TextEditingController _notesController;
 
+  // Down payment selection
+  List<DownPaymentSchemeModel> _schemes = const [];
+  bool _schemesLoading = true;
+  String? _schemeId;
+  String? _periodKey;
+
   final List<Map<String, String>> _paymentMethods = [
     {'id': 'bkash', 'name': 'bKash (বিকাশ)', 'icon': '📱'},
     {'id': 'nagad', 'name': 'Nagad (নগদ)', 'icon': '📲'},
@@ -99,6 +106,51 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
       _selectedUserId = selected.userId;
       _applyMemberDue(selected);
     }
+    _loadSchemes();
+  }
+
+  Future<void> _loadSchemes() async {
+    try {
+      final schemes = await context.read<OrgRepository>().listDownPaymentSchemes(widget.orgSlug);
+      if (!mounted) return;
+      setState(() {
+        _schemes = schemes;
+        _schemesLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _schemesLoading = false);
+    }
+  }
+
+  DownPaymentSchemeModel? get _selectedScheme {
+    for (final s in _schemes) {
+      if (s.id == _schemeId) return s;
+    }
+    return null;
+  }
+
+  void _onTypeChanged(String type) {
+    setState(() {
+      _selectedType = type;
+      if (type == 'down_payment') {
+        if (_selectedScheme == null && _schemes.isNotEmpty) {
+          _selectScheme(_schemes.first);
+        } else if (_selectedScheme != null) {
+          _amountController.text = _selectedScheme!.amount.toStringAsFixed(0);
+        }
+      } else {
+        _amountController.text = widget.defaultAmount.toStringAsFixed(0);
+        if (_selectedUserId != null && widget.members.isNotEmpty) {
+          _applyMemberDue(widget.members.firstWhere((m) => m.userId == _selectedUserId));
+        }
+      }
+    });
+  }
+
+  void _selectScheme(DownPaymentSchemeModel scheme) {
+    _schemeId = scheme.id;
+    _periodKey = scheme.currentPeriod?.key ?? (scheme.periods.isNotEmpty ? scheme.periods.last.key : null);
+    _amountController.text = scheme.amount.toStringAsFixed(0);
   }
 
   bool get _canSubmitForOthers => widget.members.isNotEmpty;
@@ -113,7 +165,7 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
   void _onMemberChanged(String? userId) {
     setState(() {
       _selectedUserId = userId;
-      if (userId != null) {
+      if (userId != null && _selectedType != 'down_payment') {
         final member = widget.members.firstWhere((m) => m.userId == userId);
         _applyMemberDue(member);
       }
@@ -156,6 +208,7 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
     }
 
     final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+    final isDownPayment = _selectedType == 'down_payment';
 
     context.read<ContributionCubit>().submitPayment(
           slug: widget.orgSlug,
@@ -164,10 +217,90 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
           paymentMethod: _selectedMethod,
           trxId: _trxIdController.text.trim(),
           senderAccount: _senderController.text.trim(),
-          targetCycle: _cycleController.text.trim(),
+          targetCycle: isDownPayment ? (_periodKey ?? '') : _cycleController.text.trim(),
+          schemeId: isDownPayment ? _schemeId : null,
           notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
           userId: _selectedUserId,
         );
+  }
+
+  List<Widget> _buildSchemeFields(bool isSubmitting) {
+    final border = OutlineInputBorder(borderRadius: BorderRadius.circular(10));
+    const padding = EdgeInsets.symmetric(horizontal: 14, vertical: 12);
+    if (_schemesLoading) {
+      return const [
+        Padding(padding: EdgeInsets.only(bottom: 16), child: LinearProgressIndicator(minHeight: 2)),
+      ];
+    }
+    if (_schemes.isEmpty) {
+      return [
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(10)),
+          child: const Text(
+            'There are no active down payment schemes in this organization.',
+            style: TextStyle(fontSize: 12.5),
+          ),
+        ),
+      ];
+    }
+    final scheme = _selectedScheme;
+    final periods = scheme?.periods ?? const <SchemePeriodModel>[];
+    SchemePeriodModel? period;
+    for (final p in periods) {
+      if (p.key == _periodKey) period = p;
+    }
+    return [
+      DropdownButtonFormField<String>(
+        initialValue: _schemeId,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: 'Down Payment Scheme',
+          prefixIcon: const Icon(Icons.account_balance_outlined, size: 20),
+          border: border,
+          contentPadding: padding,
+        ),
+        items: _schemes
+            .map((s) => DropdownMenuItem(
+                  value: s.id,
+                  child: Text('${s.title} • ৳${s.amount.toStringAsFixed(0)}', overflow: TextOverflow.ellipsis),
+                ))
+            .toList(),
+        onChanged: isSubmitting
+            ? null
+            : (id) => setState(() => _selectScheme(_schemes.firstWhere((s) => s.id == id))),
+        validator: (v) => v == null ? 'Select a scheme' : null,
+      ),
+      const SizedBox(height: 14),
+      if (periods.length > 1) ...[
+        DropdownButtonFormField<String>(
+          key: ValueKey('period-$_schemeId'),
+          initialValue: _periodKey,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: 'Paying for period',
+            prefixIcon: const Icon(Icons.event_repeat_rounded, size: 20),
+            border: border,
+            contentPadding: padding,
+          ),
+          items: periods.reversed
+              .map((p) => DropdownMenuItem(value: p.key, child: Text('${p.label} • due ${p.dueDate}')))
+              .toList(),
+          onChanged: isSubmitting ? null : (key) => setState(() => _periodKey = key),
+          validator: (v) => v == null ? 'Select a period' : null,
+        ),
+        const SizedBox(height: 14),
+      ] else if (period != null) ...[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14, left: 4),
+          child: Text(
+            '${period.label} • due ${period.dueDate}',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+          ),
+        ),
+      ],
+    ];
   }
 
   @override
@@ -308,13 +441,10 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                       ButtonSegment(value: 'down_payment', label: Text('Down Payment')),
                     ],
                     selected: {_selectedType},
-                    onSelectionChanged: (set) {
-                      setState(() {
-                        _selectedType = set.first;
-                      });
-                    },
+                    onSelectionChanged: isSubmitting ? null : (set) => _onTypeChanged(set.first),
                   ),
                   const SizedBox(height: 16),
+                  if (_selectedType == 'down_payment') ..._buildSchemeFields(isSubmitting),
 
                   // Payment Method Selector
                   const Text(
@@ -433,7 +563,8 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Target Cycle
+                  // Target Cycle (installments only; down payments use the scheme period)
+                  if (_selectedType != 'down_payment') ...[
                   TextFormField(
                     controller: _cycleController,
                     readOnly: true,
@@ -455,6 +586,7 @@ class _SubmitPaymentBottomSheetState extends State<SubmitPaymentBottomSheet> {
                     },
                   ),
                   const SizedBox(height: 14),
+                  ],
 
                   // Optional Notes
                   TextFormField(

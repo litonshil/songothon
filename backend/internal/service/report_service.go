@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"songothon/internal/domain"
 	"songothon/internal/repository/postgres"
 )
@@ -142,35 +141,6 @@ func (s *ReportService) GetMemberDashboard(
 		MembersDirectory:                directory,
 		DownPayments:                    downPayments,
 	}, nil
-}
-
-func (s *ReportService) buildDownPaymentStatuses(ctx context.Context, orgID, userID uuid.UUID) []domain.MemberDownPaymentStatus {
-	schemes, err := s.orgRepo.ListDownPaymentSchemes(ctx, orgID)
-	if err != nil {
-		return nil
-	}
-	result := make([]domain.MemberDownPaymentStatus, 0, len(schemes))
-	for _, scheme := range schemes {
-		paid, pending, _ := s.contribRepo.GetMemberTargetTotals(ctx, orgID, userID, domain.ContributionTypeDownPayment, scheme.ID.String())
-		status := "Unpaid"
-		if paid > 0 {
-			status = "Paid"
-		} else if pending > 0 {
-			status = "Pending"
-		}
-		result = append(result, domain.MemberDownPaymentStatus{
-			SchemeID:      scheme.ID,
-			Title:         scheme.Title,
-			Amount:        scheme.Amount,
-			Frequency:     scheme.Frequency,
-			StartDate:     scheme.StartDate,
-			DueDate:       scheme.DueDate,
-			Status:        status,
-			PaidAmount:    paid,
-			PendingAmount: pending,
-		})
-	}
-	return result
 }
 
 func (s *ReportService) GetAdminDashboard(

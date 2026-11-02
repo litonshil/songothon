@@ -267,4 +267,16 @@ class OrgRepository {
       throw apiClient.extractErrorMessage(e);
     }
   }
+
+  Future<SchemePeriodReportModel> getDownPaymentStatus(String slug, String schemeId, {String? period}) async {
+    try {
+      final response = await apiClient.dio.get(
+        ApiConstants.adminDownPaymentStatus(slug, schemeId),
+        queryParameters: {if (period != null && period.isNotEmpty) 'period': period},
+      );
+      return SchemePeriodReportModel.fromJson(Map<String, dynamic>.from(response.data['data'] as Map));
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
 }

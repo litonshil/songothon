@@ -21,6 +21,7 @@ class ContributionRepository {
     required String targetCycle,
     String? notes,
     String? userId,
+    String? schemeId,
   }) async {
     try {
       final response = await apiClient.dio.post(
@@ -35,6 +36,7 @@ class ContributionRepository {
           if (notes != null && notes.isNotEmpty) 'notes': notes.trim(),
           // Admins may submit on behalf of another member.
           if (userId != null && userId.isNotEmpty) 'user_id': userId,
+          if (schemeId != null && schemeId.isNotEmpty) 'scheme_id': schemeId,
         },
       );
 

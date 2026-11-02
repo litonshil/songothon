@@ -174,3 +174,17 @@ func (r *NotificationRepository) AdvanceScheduled(ctx context.Context, id uuid.U
 	_, err := r.db.Pool.Exec(ctx, `UPDATE scheduled_notifications SET scheduled_at = $2, last_sent_at = NOW(), updated_at = NOW() WHERE id = $1`, id, *next)
 	return err
 }
+
+// SentSince reports whether the user already received a notification of this
+// type whose payload has the given dedupe key since the given time.
+func (r *NotificationRepository) SentSince(ctx context.Context, userID uuid.UUID, notifType, dedupeKey string, since time.Time) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM notifications
+			WHERE user_id = $1 AND type = $2 AND payload_json->>'dedupe_key' = $3 AND created_at >= $4
+		)
+	`
+	var exists bool
+	err := r.db.Pool.QueryRow(ctx, query, userID, notifType, dedupeKey, since).Scan(&exists)
+	return exists, err
+}

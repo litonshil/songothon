@@ -12,19 +12,21 @@ import (
 )
 
 type DuesWorker struct {
-	pool         *pgxpool.Pool
-	notifService *service.NotificationService
-	interval     time.Duration
+	pool           *pgxpool.Pool
+	notifService   *service.NotificationService
+	contribService *service.ContributionService
+	interval       time.Duration
 }
 
-func NewDuesWorker(pool *pgxpool.Pool, notifService *service.NotificationService, interval time.Duration) *DuesWorker {
+func NewDuesWorker(pool *pgxpool.Pool, notifService *service.NotificationService, contribService *service.ContributionService, interval time.Duration) *DuesWorker {
 	if interval <= 0 {
 		interval = 6 * time.Hour
 	}
 	return &DuesWorker{
-		pool:         pool,
-		notifService: notifService,
-		interval:     interval,
+		pool:           pool,
+		notifService:   notifService,
+		contribService: contribService,
+		interval:       interval,
 	}
 }
 
@@ -36,6 +38,9 @@ func (w *DuesWorker) Start(ctx context.Context) {
 		time.Sleep(3 * time.Second)
 		if err := w.CheckAndNotifyUpcomingDues(ctx); err != nil {
 			log.Printf("[DuesWorker] Initial dues check notice: %v\n", err)
+		}
+		if err := w.contribService.SendDownPaymentReminders(ctx, time.Now()); err != nil {
+			log.Printf("[DuesWorker] Initial down payment reminder notice: %v\n", err)
 		}
 		if err := w.notifService.ProcessScheduled(ctx); err != nil {
 			log.Printf("[DuesWorker] Initial scheduled-notification check notice: %v\n", err)
@@ -55,6 +60,9 @@ func (w *DuesWorker) Start(ctx context.Context) {
 			case <-duesTicker.C:
 				if err := w.CheckAndNotifyUpcomingDues(ctx); err != nil {
 					log.Printf("[DuesWorker] Error during dues evaluation: %v\n", err)
+				}
+				if err := w.contribService.SendDownPaymentReminders(ctx, time.Now()); err != nil {
+					log.Printf("[DuesWorker] Error during down payment reminders: %v\n", err)
 				}
 			case <-scheduleTicker.C:
 				if err := w.notifService.ProcessScheduled(ctx); err != nil {

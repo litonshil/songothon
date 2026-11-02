@@ -74,6 +74,7 @@ class ApiConstants {
   static String adminUpdatePrivacy(String slug) => '/organizations/$slug/admin/privacy';
   static String adminShareConfig(String slug) => '/organizations/$slug/admin/share-config';
   static String downPayments(String slug) => '/organizations/$slug/down-payments';
+  static String adminDownPaymentStatus(String slug, String id) => '/organizations/$slug/admin/down-payments/$id/status';
   static String adminBroadcast(String slug) => '/organizations/$slug/admin/notifications/broadcast';
   static String adminScheduleNotification(String slug) => '/organizations/$slug/admin/notifications/schedule';
   static String adminScheduledNotifications(String slug) => '/organizations/$slug/admin/notifications/scheduled';

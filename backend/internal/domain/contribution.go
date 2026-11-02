@@ -43,6 +43,7 @@ type Contribution struct {
 	SenderAccount   string             `json:"sender_account" db:"sender_account"`
 	ReceiptURL      string             `json:"receipt_url,omitempty" db:"receipt_url"`
 	TargetCycle     string             `json:"target_cycle" db:"target_cycle"`
+	SchemeID        *uuid.UUID         `json:"scheme_id,omitempty" db:"scheme_id"`
 	Status          ContributionStatus `json:"status" db:"status"`
 	RejectionReason *string            `json:"rejection_reason,omitempty" db:"rejection_reason"`
 	ReviewedBy      *uuid.UUID         `json:"reviewed_by,omitempty" db:"reviewed_by"`
@@ -70,8 +71,12 @@ type SubmitDepositRequest struct {
 	TrxID         string           `json:"trx_id" validate:"required,min=4,max=100"`
 	SenderAccount string           `json:"sender_account" validate:"required,min=4,max=100"`
 	ReceiptURL    string           `json:"receipt_url,omitempty"`
-	TargetCycle   string           `json:"target_cycle" validate:"required"` // e.g. "2026-10" or "Q4-2026"
-	Notes         string           `json:"notes,omitempty"`
+	// Installments: a month such as "2026-10". Down payments: the scheme period
+	// ("once", "2026-Q4", "2026"); defaults to the scheme's current period.
+	TargetCycle string `json:"target_cycle"`
+	// SchemeID is required for down_payment deposits.
+	SchemeID *uuid.UUID `json:"scheme_id,omitempty"`
+	Notes    string     `json:"notes,omitempty"`
 	// UserID lets an organization admin submit a deposit on behalf of another member.
 	// It is ignored when omitted or equal to the authenticated user.
 	UserID *uuid.UUID `json:"user_id,omitempty"`

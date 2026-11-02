@@ -217,3 +217,9 @@ func (s *NotificationService) ListUserNotifications(ctx context.Context, userID 
 func (s *NotificationService) MarkAsRead(ctx context.Context, notifID, userID uuid.UUID) error {
 	return s.notifRepo.MarkAsRead(ctx, notifID, userID)
 }
+
+// SentSince reports whether a notification with this type and dedupe key was
+// already sent to the user since the given time.
+func (s *NotificationService) SentSince(ctx context.Context, userID uuid.UUID, notifType, dedupeKey string, since time.Time) (bool, error) {
+	return s.notifRepo.SentSince(ctx, userID, notifType, dedupeKey, since)
+}

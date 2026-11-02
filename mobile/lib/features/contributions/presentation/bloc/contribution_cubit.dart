@@ -17,6 +17,7 @@ class ContributionCubit extends Cubit<ContributionState> {
     required String targetCycle,
     String? notes,
     String? userId,
+    String? schemeId,
   }) async {
     emit(ContributionSubmitting());
     try {
@@ -30,6 +31,7 @@ class ContributionCubit extends Cubit<ContributionState> {
         targetCycle: targetCycle,
         notes: notes,
         userId: userId,
+        schemeId: schemeId,
       );
       emit(
         ContributionSubmittedSuccess(

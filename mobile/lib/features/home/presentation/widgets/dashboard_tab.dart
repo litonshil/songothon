@@ -268,13 +268,34 @@ class _DashboardTabState extends State<DashboardTab> {
                         children: [
                           Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
                           Text(
-                            '${humanize(item.frequency)} • Due ${formatMoney(item.pendingAmount, _currency)}',
-                            style: const TextStyle(fontSize: 11.5, color: AppTheme.textMuted),
+                            [
+                              item.currentPeriod?.label ?? humanize(item.frequency),
+                              if (item.amountDue > 0)
+                                '${formatMoney(item.amountDue, _currency)} due ${item.currentPeriod?.dueDate ?? ''}'.trim()
+                              else
+                                'Paid ${formatMoney(item.paidAmount, _currency)}',
+                            ].join(' • '),
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: item.isOverdue ? AppTheme.errorRed : AppTheme.textMuted,
+                              fontWeight: item.isOverdue ? FontWeight.w600 : FontWeight.normal,
+                            ),
                           ),
+                          if (item.pendingAmount > 0)
+                            Text(
+                              '${formatMoney(item.pendingAmount, _currency)} awaiting admin review',
+                              style: const TextStyle(fontSize: 11.5, color: AppTheme.warningOrange),
+                            ),
+                          if (item.outstandingAmount > item.amountDue)
+                            Text(
+                              'Total outstanding ${formatMoney(item.outstandingAmount, _currency)} '
+                              '(${item.unpaidPeriods.length} periods)',
+                              style: const TextStyle(fontSize: 11.5, color: AppTheme.errorRed),
+                            ),
                         ],
                       ),
                     ),
-                    StatusPill.forStatus(item.status),
+                    StatusPill.forStatus(item.isOverdue ? 'Overdue' : item.status),
                   ],
                 ),
               ),

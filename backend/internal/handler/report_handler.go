@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"songothon/internal/domain"
 	"songothon/internal/middleware"
@@ -94,4 +96,23 @@ func (h *ReportHandler) GetAdminDashboard(c echo.Context) error {
 	}
 
 	return response.Success(c, "Admin dashboard metrics retrieved", data)
+}
+
+// GetDownPaymentReport shows each active member's standing on a scheme for a
+// period. Query param "period" (e.g. 2026-Q4) defaults to the current period.
+func (h *ReportHandler) GetDownPaymentReport(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	schemeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return response.BadRequest(c, "Invalid scheme ID format")
+	}
+
+	report, err := h.reportService.GetSchemePeriodReport(c.Request().Context(), org.ID, schemeID, c.QueryParam("period"))
+	if errors.Is(err, service.ErrSchemeNotFound) {
+		return response.NotFound(c, err.Error())
+	}
+	if err != nil {
+		return response.BadRequest(c, err.Error())
+	}
+	return response.Success(c, "Down payment status retrieved", report)
 }

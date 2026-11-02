@@ -345,10 +345,22 @@ func (r *OrgRepository) CreateDownPaymentScheme(ctx context.Context, dp *domain.
 	).Scan(&dp.CreatedAt, &dp.UpdatedAt)
 }
 
+const downPaymentSchemeColumns = `
+	id, org_id, title, amount, scheme_type, frequency,
+	TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(due_date, 'YYYY-MM-DD'), is_active, created_at, updated_at`
+
+func scanDownPaymentScheme(row pgx.Row) (*domain.DownPaymentScheme, error) {
+	var s domain.DownPaymentScheme
+	err := row.Scan(&s.ID, &s.OrgID, &s.Title, &s.Amount, &s.SchemeType, &s.Frequency,
+		&s.StartDate, &s.DueDate, &s.IsActive, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 func (r *OrgRepository) ListDownPaymentSchemes(ctx context.Context, orgID uuid.UUID) ([]domain.DownPaymentScheme, error) {
-	query := `
-		SELECT id, org_id, title, amount, scheme_type, frequency,
-			TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(due_date, 'YYYY-MM-DD'), is_active, created_at, updated_at
+	query := `SELECT ` + downPaymentSchemeColumns + `
 		FROM down_payment_schemes
 		WHERE org_id = $1 AND is_active = true
 		ORDER BY created_at DESC
@@ -361,16 +373,50 @@ func (r *OrgRepository) ListDownPaymentSchemes(ctx context.Context, orgID uuid.U
 
 	var schemes []domain.DownPaymentScheme
 	for rows.Next() {
-		var s domain.DownPaymentScheme
-		err := rows.Scan(
-			&s.ID, &s.OrgID, &s.Title, &s.Amount, &s.SchemeType, &s.Frequency, &s.StartDate, &s.DueDate, &s.IsActive, &s.CreatedAt, &s.UpdatedAt,
-		)
+		s, err := scanDownPaymentScheme(rows)
 		if err != nil {
 			return nil, err
 		}
-		schemes = append(schemes, s)
+		schemes = append(schemes, *s)
 	}
-	return schemes, nil
+	return schemes, rows.Err()
+}
+
+// GetDownPaymentScheme returns the scheme if it belongs to the org (active or not), or nil.
+func (r *OrgRepository) GetDownPaymentScheme(ctx context.Context, orgID, schemeID uuid.UUID) (*domain.DownPaymentScheme, error) {
+	query := `SELECT ` + downPaymentSchemeColumns + ` FROM down_payment_schemes WHERE org_id = $1 AND id = $2`
+	s, err := scanDownPaymentScheme(r.db.Pool.QueryRow(ctx, query, orgID, schemeID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch down payment scheme: %w", err)
+	}
+	return s, nil
+}
+
+// ListAllActiveSchemes returns active schemes across all organizations (for the reminder worker).
+func (r *OrgRepository) ListAllActiveSchemes(ctx context.Context) ([]domain.DownPaymentScheme, error) {
+	query := `SELECT ` + downPaymentSchemeColumns + `
+		FROM down_payment_schemes s
+		WHERE s.is_active = true
+		  AND EXISTS (SELECT 1 FROM organizations o WHERE o.id = s.org_id AND o.deleted_at IS NULL)
+	`
+	rows, err := r.db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var schemes []domain.DownPaymentScheme
+	for rows.Next() {
+		s, err := scanDownPaymentScheme(rows)
+		if err != nil {
+			return nil, err
+		}
+		schemes = append(schemes, *s)
+	}
+	return schemes, rows.Err()
 }
 
 func (r *OrgRepository) ListPendingJoinRequests(ctx context.Context, orgID uuid.UUID) ([]domain.PendingJoinRequest, error) {

@@ -252,11 +252,12 @@ func (h *OrgHandler) CreateDownPaymentScheme(c echo.Context) error {
 		return response.BadRequest(c, "Invalid down payment payload")
 	}
 
-	if err := h.orgService.CreateDownPaymentScheme(c.Request().Context(), org.ID, adminID, &req); err != nil {
+	scheme, err := h.orgService.CreateDownPaymentScheme(c.Request().Context(), org.ID, adminID, &req)
+	if err != nil {
 		return response.BadRequest(c, err.Error())
 	}
 
-	return response.Created(c, "Down payment scheme created successfully", nil)
+	return response.Created(c, "Down payment scheme created successfully", scheme)
 }
 
 func (h *OrgHandler) ListDownPaymentSchemes(c echo.Context) error {

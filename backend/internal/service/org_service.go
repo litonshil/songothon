@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"songothon/internal/domain"
@@ -518,19 +520,54 @@ func (s *OrgService) ConfigureShares(ctx context.Context, orgID, adminID uuid.UU
 	return nil
 }
 
-func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID uuid.UUID, req *domain.CreateDownPaymentSchemeRequest) error {
+func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID uuid.UUID, req *domain.CreateDownPaymentSchemeRequest) (*domain.DownPaymentScheme, error) {
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		return nil, errors.New("scheme title is required")
+	}
+	if req.Amount <= 0 {
+		return nil, errors.New("amount must be greater than zero")
+	}
+	switch req.SchemeType {
+	case "mandatory", "optional":
+	case "":
+		req.SchemeType = "mandatory"
+	default:
+		return nil, errors.New("scheme type must be mandatory or optional")
+	}
+	switch req.Frequency {
+	case domain.SchemeFrequencyOneTime, domain.SchemeFrequencyQuarterly, domain.SchemeFrequencyYearly:
+	default:
+		return nil, errors.New("frequency must be one_time, quarterly or yearly")
+	}
+	startDate, err := optionalDate(req.StartDate, "start date")
+	if err != nil {
+		return nil, err
+	}
+	dueDate, err := optionalDate(req.DueDate, "due date")
+	if err != nil {
+		return nil, err
+	}
+	if startDate == nil {
+		today := time.Now().Format("2006-01-02")
+		startDate = &today
+	}
+	if dueDate != nil && *dueDate < *startDate {
+		return nil, errors.New("due date cannot be before the start date")
+	}
+
 	dp := &domain.DownPaymentScheme{
 		OrgID:      orgID,
-		Title:      req.Title,
+		Title:      title,
 		Amount:     req.Amount,
 		SchemeType: req.SchemeType,
 		Frequency:  req.Frequency,
-		StartDate:  req.StartDate,
-		DueDate:    req.DueDate,
+		StartDate:  startDate,
+		DueDate:    dueDate,
 	}
 
 	if err := s.orgRepo.CreateDownPaymentScheme(ctx, dp); err != nil {
-		return fmt.Errorf("failed to create down payment scheme: %w", err)
+		return nil, fmt.Errorf("failed to create down payment scheme: %w", err)
 	}
 
 	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
@@ -540,14 +577,83 @@ func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID
 		EntityType: "down_payment_schemes",
 		EntityID:   &dp.ID,
 		DetailsJSON: map[string]interface{}{
-			"title":  req.Title,
-			"amount": req.Amount,
+			"title":       title,
+			"amount":      req.Amount,
+			"frequency":   req.Frequency,
+			"scheme_type": req.SchemeType,
+			"start_date":  *startDate,
 		},
 	})
 
-	return nil
+	schemes := []domain.DownPaymentScheme{*dp}
+	decorateSchemes(schemes, time.Now())
+	created := &schemes[0]
+
+	if created.SchemeType == "mandatory" {
+		go s.announceScheme(context.WithoutCancel(ctx), orgID, *created)
+	}
+	return created, nil
+}
+
+// announceScheme tells every active member about a new mandatory scheme.
+func (s *OrgService) announceScheme(ctx context.Context, orgID uuid.UUID, scheme domain.DownPaymentScheme) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	members, err := s.orgRepo.ListMembers(ctx, orgID)
+	if err != nil {
+		log.Printf("announce scheme %s: %v", scheme.ID, err)
+		return
+	}
+	var userIDs []uuid.UUID
+	for _, m := range members {
+		if m.Status == domain.MemberStatusActive {
+			userIDs = append(userIDs, m.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+
+	currency := "BDT"
+	if org, _ := s.orgRepo.GetByID(ctx, orgID); org != nil && org.Currency != "" {
+		currency = org.Currency
+	}
+	cur := scheme.CurrentPeriod
+	every := map[string]string{
+		domain.SchemeFrequencyQuarterly: " every quarter",
+		domain.SchemeFrequencyYearly:    " every year",
+	}[scheme.Frequency]
+	body := fmt.Sprintf("New down payment \"%s\": %s %.2f per member%s. Payment for %s is due by %s.",
+		scheme.Title, currency, scheme.Amount, every, cur.Label, cur.DueDate)
+	if scheme.Frequency == domain.SchemeFrequencyOneTime {
+		body = fmt.Sprintf("New down payment \"%s\": %s %.2f per member, due by %s.",
+			scheme.Title, currency, scheme.Amount, cur.DueDate)
+	}
+	if err := s.notifService.SendToMembers(ctx, orgID, userIDs, "New Down Payment 📢", body); err != nil {
+		log.Printf("announce scheme %s: %v", scheme.ID, err)
+	}
+}
+
+func optionalDate(v *string, field string) (*string, error) {
+	if v == nil || strings.TrimSpace(*v) == "" {
+		return nil, nil
+	}
+	d := strings.TrimSpace(*v)
+	if _, err := time.Parse("2006-01-02", d); err != nil {
+		return nil, fmt.Errorf("%s must be in YYYY-MM-DD format", field)
+	}
+	return &d, nil
 }
 
 func (s *OrgService) ListDownPaymentSchemes(ctx context.Context, orgID uuid.UUID) ([]domain.DownPaymentScheme, error) {
-	return s.orgRepo.ListDownPaymentSchemes(ctx, orgID)
+	schemes, err := s.orgRepo.ListDownPaymentSchemes(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if schemes == nil {
+		schemes = []domain.DownPaymentScheme{}
+	}
+	decorateSchemes(schemes, time.Now())
+	return schemes, nil
 }

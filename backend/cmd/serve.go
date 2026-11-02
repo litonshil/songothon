@@ -87,7 +87,7 @@ func runServer(ctx context.Context) error {
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
-	duesWorker := worker.NewDuesWorker(db.Pool, notifService, 6*time.Hour)
+	duesWorker := worker.NewDuesWorker(db.Pool, notifService, contribService, 6*time.Hour)
 	duesWorker.Start(workerCtx)
 
 	// 6. HTTP engine
@@ -177,6 +177,7 @@ func runServer(ctx context.Context) error {
 	adminGroup.PATCH("/privacy", orgHandler.UpdatePrivacy)
 	adminGroup.POST("/share-config", orgHandler.ConfigureShares)
 	adminGroup.POST("/down-payments", orgHandler.CreateDownPaymentScheme)
+	adminGroup.GET("/down-payments/:id/status", reportHandler.GetDownPaymentReport)
 	adminGroup.POST("/investments", invHandler.CreateInvestment)
 	adminGroup.PUT("/investments/:id", invHandler.UpdateInvestment)
 	adminGroup.DELETE("/investments/:id", invHandler.DeleteInvestment)
