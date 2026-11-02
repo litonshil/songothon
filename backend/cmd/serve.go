@@ -162,6 +162,7 @@ func runServer(ctx context.Context) error {
 	adminGroup.Use(appmw.RequireOrgAdmin())
 
 	adminGroup.GET("/dashboard", reportHandler.GetAdminDashboard)
+	adminGroup.GET("/reports/member-deposits", reportHandler.GetMemberDepositReport)
 	adminGroup.GET("/contributions/pending", contribHandler.ListPending)
 	adminGroup.GET("/contributions", contribHandler.ListAll)
 	adminGroup.POST("/contributions/bulk-upload", contribHandler.BulkUploadDeposits)

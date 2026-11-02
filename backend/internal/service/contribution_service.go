@@ -180,8 +180,8 @@ func (s *ContributionService) ListPending(ctx context.Context, orgID uuid.UUID) 
 	return s.contribRepo.ListPending(ctx, orgID)
 }
 
-func (s *ContributionService) ListContributions(ctx context.Context, orgID uuid.UUID, cycle, status string) ([]domain.ContributionDetail, error) {
-	return s.contribRepo.ListByOrg(ctx, orgID, cycle, status)
+func (s *ContributionService) ListContributions(ctx context.Context, orgID uuid.UUID, cycle, status string, userID *uuid.UUID) ([]domain.ContributionDetail, error) {
+	return s.contribRepo.ListByOrg(ctx, orgID, cycle, status, userID)
 }
 
 func (s *ContributionService) ListUserContributions(ctx context.Context, orgID, userID uuid.UUID) ([]domain.Contribution, error) {

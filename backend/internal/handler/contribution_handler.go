@@ -71,8 +71,16 @@ func (h *ContributionHandler) ListAll(c echo.Context) error {
 	org := middleware.GetCurrentOrg(c)
 	cycle := c.QueryParam("cycle")
 	status := c.QueryParam("status")
+	var userID *uuid.UUID
+	if raw := c.QueryParam("user_id"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return response.BadRequest(c, "Invalid user_id format")
+		}
+		userID = &id
+	}
 
-	list, err := h.contribService.ListContributions(c.Request().Context(), org.ID, cycle, status)
+	list, err := h.contribService.ListContributions(c.Request().Context(), org.ID, cycle, status, userID)
 	if err != nil {
 		return response.InternalError(c, err.Error())
 	}

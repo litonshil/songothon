@@ -116,3 +116,13 @@ func (h *ReportHandler) GetDownPaymentReport(c echo.Context) error {
 	}
 	return response.Success(c, "Down payment status retrieved", report)
 }
+
+// GetMemberDepositReport lists each member's total deposits (admin only).
+func (h *ReportHandler) GetMemberDepositReport(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	report, err := h.reportService.GetMemberDepositReport(c.Request().Context(), org)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+	return response.Success(c, "Member deposit totals retrieved", report)
+}

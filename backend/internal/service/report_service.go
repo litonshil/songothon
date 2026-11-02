@@ -216,3 +216,24 @@ func (s *ReportService) GetAdminDashboard(
 		Members:                  members,
 	}, nil
 }
+
+// GetMemberDepositReport lists every member's total deposits for admins.
+func (s *ReportService) GetMemberDepositReport(ctx context.Context, org *domain.Organization) (*domain.MemberDepositReport, error) {
+	members, err := s.contribRepo.ListMemberDepositTotals(ctx, org.ID)
+	if err != nil {
+		return nil, err
+	}
+	currency := org.Currency
+	if currency == "" {
+		currency = "BDT"
+	}
+	report := &domain.MemberDepositReport{Currency: currency, MemberCount: len(members), Members: members}
+	for _, m := range members {
+		report.TotalDeposit += m.TotalDeposit
+		report.InstallmentTotal += m.InstallmentTotal
+		report.DownPaymentTotal += m.DownPaymentTotal
+		report.OtherTotal += m.OtherTotal
+		report.PendingAmount += m.PendingAmount
+	}
+	return report, nil
+}

@@ -138,3 +138,33 @@ type AdminDashboardData struct {
 	PortfolioMetrics         PortfolioMetrics         `json:"portfolio_metrics"`
 	Members                  []OrgMemberDetail        `json:"members"`
 }
+
+// MemberDepositTotal is one member's deposit totals (admin report).
+type MemberDepositTotal struct {
+	UserID           uuid.UUID    `json:"user_id"`
+	FullName         string       `json:"full_name"`
+	Email            string       `json:"email"`
+	Role             OrgRole      `json:"role"`
+	Status           MemberStatus `json:"status"`
+	SharesCount      int          `json:"shares_count"`
+	InstallmentTotal float64      `json:"installment_total"`
+	DownPaymentTotal float64      `json:"down_payment_total"`
+	OtherTotal       float64      `json:"other_total"`
+	TotalDeposit     float64      `json:"total_deposit"` // approved only
+	PendingAmount    float64      `json:"pending_amount"`
+	DepositCount     int          `json:"deposit_count"` // approved deposits
+	FirstCycle       *string      `json:"first_cycle,omitempty"`
+	LastCycle        *string      `json:"last_cycle,omitempty"`
+	LastPaidAt       *time.Time   `json:"last_paid_at,omitempty"`
+}
+
+type MemberDepositReport struct {
+	Currency         string               `json:"currency"`
+	MemberCount      int                  `json:"member_count"`
+	TotalDeposit     float64              `json:"total_deposit"`
+	InstallmentTotal float64              `json:"installment_total"`
+	DownPaymentTotal float64              `json:"down_payment_total"`
+	OtherTotal       float64              `json:"other_total"`
+	PendingAmount    float64              `json:"pending_amount"`
+	Members          []MemberDepositTotal `json:"members"`
+}

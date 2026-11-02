@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_constants.dart';
 import '../models/bulk_deposit_result_model.dart';
+import '../models/member_deposit_report_model.dart';
 import '../models/contribution_model.dart';
 
 class ContributionRepository {
@@ -57,9 +58,12 @@ class ContributionRepository {
     }
   }
 
-  Future<List<ContributionModel>> getAllContributions(String slug) async {
+  Future<List<ContributionModel>> getAllContributions(String slug, {String? userId}) async {
     try {
-      final response = await apiClient.dio.get(ApiConstants.adminAllContributionsForOrg(slug));
+      final response = await apiClient.dio.get(
+        ApiConstants.adminAllContributionsForOrg(slug),
+        queryParameters: {if (userId != null && userId.isNotEmpty) 'user_id': userId},
+      );
       final list = response.data['data'] as List? ?? [];
       return list.map((item) => ContributionModel.fromJson(item as Map<String, dynamic>)).toList();
     } catch (e) {
@@ -139,6 +143,15 @@ class ContributionRepository {
         );
       }
       throw apiClient.extractErrorMessage(e);
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
+  Future<MemberDepositReportModel> getMemberDepositReport(String slug) async {
+    try {
+      final response = await apiClient.dio.get(ApiConstants.adminMemberDepositReport(slug));
+      return MemberDepositReportModel.fromJson(Map<String, dynamic>.from(response.data['data'] as Map));
     } catch (e) {
       throw apiClient.extractErrorMessage(e);
     }

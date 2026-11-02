@@ -51,6 +51,7 @@ class ApiConstants {
   static String myHistoryForOrg(String slug) => '/organizations/$slug/contributions/my-history';
   static String adminPendingDepositsForOrg(String slug) => '/organizations/$slug/admin/contributions/pending';
   static String adminAllContributionsForOrg(String slug) => '/organizations/$slug/admin/contributions';
+  static String adminMemberDepositReport(String slug) => '/organizations/$slug/admin/reports/member-deposits';
   static String adminBulkUploadDeposits(String slug) => '/organizations/$slug/admin/contributions/bulk-upload';
   static String adminApproveDepositForOrg(String slug, String id) => '/organizations/$slug/admin/contributions/$id/approve';
   static String adminRejectDepositForOrg(String slug, String id) => '/organizations/$slug/admin/contributions/$id/reject';

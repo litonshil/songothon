@@ -12,6 +12,7 @@ import '../../../organization/data/repositories/org_repository.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
 import '../widgets/submit_payment_bottom_sheet.dart';
 import 'bulk_deposit_upload_screen.dart';
+import 'member_deposits_screen.dart';
 
 class DepositsTab extends StatefulWidget {
   final String orgSlug;
@@ -188,6 +189,12 @@ class _DepositsTabState extends State<DepositsTab> {
             actions: [
               if (widget.isAdmin)
                 IconButton(
+                  onPressed: () => MemberDepositsScreen.open(context, orgSlug: widget.orgSlug),
+                  tooltip: 'Member deposit totals',
+                  icon: const Icon(Icons.leaderboard_outlined, color: AppTheme.primaryNavy),
+                ),
+              if (widget.isAdmin)
+                IconButton(
                   onPressed: _openBulkUpload,
                   tooltip: 'Bulk upload deposits (.xlsx)',
                   icon: const Icon(Icons.upload_file_rounded, color: AppTheme.primaryNavy),
@@ -226,7 +233,7 @@ class _DepositsTabState extends State<DepositsTab> {
           else
             ..._filtered.map((item) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _DepositCard(
+              child: DepositCard(
                 item: item,
                 showMember: widget.isAdmin,
                 onApprove: widget.isAdmin && item.isPending ? () => _approve(item) : null,
@@ -239,13 +246,13 @@ class _DepositsTabState extends State<DepositsTab> {
   }
 }
 
-class _DepositCard extends StatelessWidget {
+class DepositCard extends StatelessWidget {
   final ContributionModel item;
   final bool showMember;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
 
-  const _DepositCard({required this.item, required this.showMember, this.onApprove, this.onReject});
+  const DepositCard({super.key, required this.item, required this.showMember, this.onApprove, this.onReject});
 
   IconData get _methodIcon => switch (item.paymentMethod) {
         'bkash' || 'nagad' || 'rocket' => Icons.phone_android_rounded,

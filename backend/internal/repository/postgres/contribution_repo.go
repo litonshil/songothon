@@ -197,7 +197,7 @@ func (r *ContributionRepository) ListPending(ctx context.Context, orgID uuid.UUI
 	return list, nil
 }
 
-func (r *ContributionRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, cycle string, status string) ([]domain.ContributionDetail, error) {
+func (r *ContributionRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, cycle string, status string, userID *uuid.UUID) ([]domain.ContributionDetail, error) {
 	query := `
 		SELECT 
 			c.id, c.org_id, c.user_id, c.type, c.amount, c.payment_method, c.trx_id, c.sender_account,
@@ -209,9 +209,10 @@ func (r *ContributionRepository) ListByOrg(ctx context.Context, orgID uuid.UUID,
 		WHERE c.org_id = $1 AND c.deleted_at IS NULL
 		  AND ($2 = '' OR c.target_cycle = $2)
 		  AND ($3 = '' OR c.status = $3)
+		  AND ($4::uuid IS NULL OR c.user_id = $4)
 		ORDER BY c.paid_at DESC
 	`
-	rows, err := r.db.Pool.Query(ctx, query, orgID, cycle, status)
+	rows, err := r.db.Pool.Query(ctx, query, orgID, cycle, status, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -480,6 +481,52 @@ func (r *ContributionRepository) ListSchemeTotals(ctx context.Context, orgID uui
 	for rows.Next() {
 		var t domain.SchemePaymentTotal
 		if err := rows.Scan(&t.SchemeID, &t.UserID, &t.Period, &t.Approved, &t.Pending); err != nil {
+			return nil, err
+		}
+		list = append(list, t)
+	}
+	return list, rows.Err()
+}
+
+// ListMemberDepositTotals returns approved deposit totals (split by type) and
+// pending amounts for every current member of the organization.
+func (r *ContributionRepository) ListMemberDepositTotals(ctx context.Context, orgID uuid.UUID) ([]domain.MemberDepositTotal, error) {
+	query := `
+		SELECT
+			m.user_id, u.full_name, u.email, m.role, m.status, m.shares_count,
+			COALESCE(SUM(c.amount) FILTER (WHERE c.status = 'APPROVED' AND c.type = 'share_installment'), 0)::float8,
+			COALESCE(SUM(c.amount) FILTER (WHERE c.status = 'APPROVED' AND c.type = 'down_payment'), 0)::float8,
+			COALESCE(SUM(c.amount) FILTER (WHERE c.status = 'APPROVED' AND c.type NOT IN ('share_installment', 'down_payment')), 0)::float8,
+			COALESCE(SUM(c.amount) FILTER (WHERE c.status = 'APPROVED'), 0)::float8,
+			COALESCE(SUM(c.amount) FILTER (WHERE c.status = 'PENDING'), 0)::float8,
+			COUNT(c.id) FILTER (WHERE c.status = 'APPROVED'),
+			MIN(c.target_cycle) FILTER (WHERE c.status = 'APPROVED' AND c.type = 'share_installment'),
+			MAX(c.target_cycle) FILTER (WHERE c.status = 'APPROVED' AND c.type = 'share_installment'),
+			MAX(c.paid_at) FILTER (WHERE c.status = 'APPROVED')
+		FROM organization_members m
+		JOIN users u ON u.id = m.user_id
+		LEFT JOIN contributions c
+		       ON c.org_id = m.org_id AND c.user_id = m.user_id
+		      AND c.status IN ('APPROVED', 'PENDING') AND c.deleted_at IS NULL
+		WHERE m.org_id = $1 AND m.status IN ('active', 'invited', 'suspended')
+		  AND m.deleted_at IS NULL AND u.deleted_at IS NULL
+		GROUP BY m.user_id, u.full_name, u.email, m.role, m.status, m.shares_count
+		ORDER BY 10 DESC, u.full_name ASC
+	`
+	rows, err := r.db.Pool.Query(ctx, query, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load member deposit totals: %w", err)
+	}
+	defer rows.Close()
+
+	list := []domain.MemberDepositTotal{}
+	for rows.Next() {
+		var t domain.MemberDepositTotal
+		if err := rows.Scan(
+			&t.UserID, &t.FullName, &t.Email, &t.Role, &t.Status, &t.SharesCount,
+			&t.InstallmentTotal, &t.DownPaymentTotal, &t.OtherTotal, &t.TotalDeposit, &t.PendingAmount,
+			&t.DepositCount, &t.FirstCycle, &t.LastCycle, &t.LastPaidAt,
+		); err != nil {
 			return nil, err
 		}
 		list = append(list, t)
