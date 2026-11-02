@@ -164,6 +164,7 @@ func runServer(ctx context.Context) error {
 	adminGroup.GET("/dashboard", reportHandler.GetAdminDashboard)
 	adminGroup.GET("/contributions/pending", contribHandler.ListPending)
 	adminGroup.GET("/contributions", contribHandler.ListAll)
+	adminGroup.POST("/contributions/bulk-upload", contribHandler.BulkUploadDeposits)
 	adminGroup.POST("/contributions/:id/approve", contribHandler.ApproveDeposit)
 	adminGroup.POST("/contributions/:id/reject", contribHandler.RejectDeposit)
 	adminGroup.POST("/members/invite", orgHandler.InviteMember)

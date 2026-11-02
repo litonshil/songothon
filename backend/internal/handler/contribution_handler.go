@@ -1,6 +1,13 @@
 package handler
 
 import (
+	"errors"
+	"io"
+	"net/http"
+	"path/filepath"
+	"strconv"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"songothon/internal/domain"
@@ -112,4 +119,60 @@ func (h *ContributionHandler) RejectDeposit(c echo.Context) error {
 	}
 
 	return response.Success(c, "Deposit rejected", rejected)
+}
+
+const bulkDepositMaxFileBytes = 5 << 20 // 5 MB
+
+// BulkUploadDeposits accepts a multipart form with:
+//   - file:           the .xlsx sheet (Email column + YYYY-MM cycle columns)
+//   - payment_method: optional, defaults to "cash"
+//   - dry_run:        "true" to validate and preview without writing anything
+func (h *ContributionHandler) BulkUploadDeposits(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	adminID := middleware.GetUserID(c)
+
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return response.BadRequest(c, `Attach the spreadsheet as the "file" form field`)
+	}
+	if !strings.EqualFold(filepath.Ext(fh.Filename), ".xlsx") {
+		return response.BadRequest(c, "Only .xlsx files are supported")
+	}
+	if fh.Size > bulkDepositMaxFileBytes {
+		return response.BadRequest(c, "File is too large; the limit is 5 MB")
+	}
+
+	src, err := fh.Open()
+	if err != nil {
+		return response.BadRequest(c, "Could not read the uploaded file")
+	}
+	defer src.Close()
+
+	dryRun, _ := strconv.ParseBool(c.FormValue("dry_run"))
+	opts := service.BulkDepositOptions{
+		PaymentMethod: domain.PaymentMethod(strings.TrimSpace(c.FormValue("payment_method"))),
+		DryRun:        dryRun,
+		FileName:      filepath.Base(fh.Filename),
+	}
+
+	result, err := h.contribService.BulkUploadDeposits(c.Request().Context(), org.ID, adminID, io.LimitReader(src, bulkDepositMaxFileBytes), opts)
+	if errors.Is(err, service.ErrBulkDepositInvalid) {
+		return c.JSON(http.StatusUnprocessableEntity, response.APIResponse{
+			Success: false,
+			Error:   err.Error(),
+			Data:    result,
+		})
+	}
+	if err != nil {
+		return response.BadRequest(c, err.Error())
+	}
+
+	switch {
+	case dryRun:
+		return response.Success(c, "Spreadsheet validated; review the preview and confirm to import", result)
+	case result.Imported:
+		return response.Created(c, "Deposits imported and approved successfully", result)
+	default:
+		return response.Success(c, "Nothing to import; every deposit in this sheet is already recorded", result)
+	}
 }

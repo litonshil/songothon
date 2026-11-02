@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,60 @@ func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribut
 	}
 	defer tx.Rollback(ctx)
 
+	if err := insertContribution(ctx, tx, c); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// BulkCreate inserts all contributions in a single transaction: either every
+// row (and its ledger entry, when approved) is written, or none are.
+func (r *ContributionRepository) BulkCreate(ctx context.Context, list []*domain.Contribution) error {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for _, c := range list {
+		if err := insertContribution(ctx, tx, c); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// ExistingTrxIDs returns which of the given trx IDs (lower-cased) are already
+// used by a non-rejected contribution in the organization.
+func (r *ContributionRepository) ExistingTrxIDs(ctx context.Context, orgID uuid.UUID, trxIDs []string) (map[string]bool, error) {
+	found := make(map[string]bool)
+	if len(trxIDs) == 0 {
+		return found, nil
+	}
+	lowered := make([]string, len(trxIDs))
+	for i, id := range trxIDs {
+		lowered[i] = strings.ToLower(id)
+	}
+	query := `
+		SELECT LOWER(trx_id) FROM contributions
+		WHERE org_id = $1 AND LOWER(trx_id) = ANY($2) AND status != 'REJECTED' AND deleted_at IS NULL
+	`
+	rows, err := r.db.Pool.Query(ctx, query, orgID, lowered)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing transaction IDs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		found[id] = true
+	}
+	return found, rows.Err()
+}
+
+func insertContribution(ctx context.Context, tx pgx.Tx, c *domain.Contribution) error {
 	// Check for existing non-rejected TrxID in the same org
 	var existingID uuid.UUID
 	checkQuery := `
@@ -33,7 +88,7 @@ func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribut
 		WHERE org_id = $1 AND LOWER(trx_id) = LOWER($2) AND status != 'REJECTED' AND deleted_at IS NULL
 		LIMIT 1
 	`
-	err = tx.QueryRow(ctx, checkQuery, c.OrgID, c.TrxID).Scan(&existingID)
+	err := tx.QueryRow(ctx, checkQuery, c.OrgID, c.TrxID).Scan(&existingID)
 	if err == nil {
 		return fmt.Errorf("transaction ID '%s' has already been submitted for this organization", c.TrxID)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
@@ -77,8 +132,7 @@ func (r *ContributionRepository) Create(ctx context.Context, c *domain.Contribut
 			return err
 		}
 	}
-
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *ContributionRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.ContributionDetail, error) {

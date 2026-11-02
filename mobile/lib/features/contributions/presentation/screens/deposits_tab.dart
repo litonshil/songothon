@@ -11,6 +11,7 @@ import '../../../organization/data/models/organization_model.dart';
 import '../../../organization/data/repositories/org_repository.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
 import '../widgets/submit_payment_bottom_sheet.dart';
+import 'bulk_deposit_upload_screen.dart';
 
 class DepositsTab extends StatefulWidget {
   final String orgSlug;
@@ -101,6 +102,14 @@ class _DepositsTabState extends State<DepositsTab> {
     );
   }
 
+  Future<void> _openBulkUpload() async {
+    final imported = await BulkDepositUploadScreen.open(context, orgSlug: widget.orgSlug);
+    if (imported == true && mounted) {
+      _load();
+      widget.onRefreshShell();
+    }
+  }
+
   Future<void> _approve(ContributionModel item) async {
     final ok = await confirmAction(context, title: 'Approve deposit?', message: 'Approve ${formatMoney(item.amount)} from ${item.memberName ?? 'member'}?', confirmLabel: 'Approve');
     if (!ok || !mounted) return;
@@ -177,6 +186,12 @@ class _DepositsTabState extends State<DepositsTab> {
                 ? '$pendingCount pending review • ${_items.length} total transactions'
                 : '${_items.length} transactions recorded',
             actions: [
+              if (widget.isAdmin)
+                IconButton(
+                  onPressed: _openBulkUpload,
+                  tooltip: 'Bulk upload deposits (.xlsx)',
+                  icon: const Icon(Icons.upload_file_rounded, color: AppTheme.primaryNavy),
+                ),
               IconButton(
                 onPressed: _openDeposit,
                 tooltip: widget.isAdmin ? 'Submit deposit for a member' : 'Submit deposit',
