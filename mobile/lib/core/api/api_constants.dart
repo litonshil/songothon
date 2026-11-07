@@ -65,6 +65,8 @@ class ApiConstants {
   static String incomesForOrg(String slug) => '/organizations/$slug/incomes';
   static String adminCreateIncomeForOrg(String slug) => '/organizations/$slug/admin/incomes';
   static String membersForOrg(String slug) => '/organizations/$slug/members';
+  static String leaveOrg(String slug) => '/organizations/$slug/leave';
+  static String adminUpdateOrg(String slug) => '/organizations/$slug/admin';
   static String adminInviteMember(String slug) => '/organizations/$slug/admin/members/invite';
   static String adminUpdateMember(String slug, String userId) => '/organizations/$slug/admin/members/$userId';
   static String adminRemoveMember(String slug, String userId) => '/organizations/$slug/admin/members/$userId';

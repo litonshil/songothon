@@ -10,7 +10,10 @@ import '../../../dashboard/data/repositories/dashboard_repository.dart';
 import '../../../expenses/presentation/screens/expenses_screen.dart';
 import '../../../income/presentation/screens/incomes_screen.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
+import '../../../organization/data/models/organization_model.dart';
+import '../../../organization/data/repositories/org_repository.dart';
 import '../../../organization/presentation/screens/admin_tools_screen.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
 
 class MoreTab extends StatefulWidget {
@@ -72,6 +75,169 @@ class _MoreTabState extends State<MoreTab> {
     if (!mounted) return;
     final authCubit = context.read<AuthCubit>();
     await authCubit.logout();
+  }
+
+  void _showError(Object e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed),
+    );
+  }
+
+  Future<void> _renameOrg() async {
+    final nameCtrl = TextEditingController(text: _dashboard?.organizationName ?? '');
+    final descCtrl = TextEditingController(text: _dashboard?.organizationDescription ?? '');
+    final formKey = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename organization'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Organization name'),
+                validator: (v) {
+                  final t = (v ?? '').trim();
+                  if (t.length < 2) return 'At least 2 characters';
+                  if (t.length > 200) return 'At most 200 characters';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: descCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Description (optional)'),
+              ),
+              const SizedBox(height: 8),
+              Text('The join code @${widget.orgSlug} does not change.',
+                  style: const TextStyle(fontSize: 11.5, color: AppTheme.textMuted)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) Navigator.pop(ctx, true);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true || !mounted) return;
+    try {
+      await context.read<OrgRepository>().renameOrganization(
+            slug: widget.orgSlug,
+            name: nameCtrl.text,
+            description: descCtrl.text,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Organization renamed.')));
+      await _load();
+      widget.onRefreshShell();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<void> _leaveOrg() async {
+    final repo = context.read<OrgRepository>();
+    final authState = context.read<AuthCubit>().state;
+    final myId = authState is Authenticated ? authState.user.id : null;
+    String? successorId;
+
+    if (widget.isAdmin) {
+      List<OrgMemberModel> members;
+      try {
+        members = await repo.listMembers(widget.orgSlug);
+      } catch (e) {
+        _showError(e);
+        return;
+      }
+      final others = members.where((m) => m.userId != myId && m.status == 'active').toList();
+      final otherAdmins = others.where((m) => m.role == 'org_admin');
+      if (otherAdmins.isEmpty && others.isNotEmpty) {
+        if (!mounted) return;
+        successorId = await _pickSuccessor(others);
+        if (successorId == null) return;
+      }
+    }
+
+    if (!mounted) return;
+    final ok = await confirmAction(
+      context,
+      title: 'Leave organization?',
+      message: successorId != null
+          ? 'The member you chose will become administrator. Your deposits and history stay on record, '
+              'but you will lose access until an administrator approves a new join request.'
+          : 'Your deposits and history stay on record, but you will lose access until an administrator '
+              'approves a new join request.',
+      confirmLabel: 'Leave',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+
+    try {
+      await repo.leaveOrganization(widget.orgSlug, successorUserId: successorId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You left the organization.')));
+      widget.onSwitchOrg();
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<String?> _pickSuccessor(List<OrgMemberModel> candidates) {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choose a new administrator'),
+        contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text('You are the only administrator. Pick a member to take over before you leave.',
+                    style: TextStyle(fontSize: 12.5, color: AppTheme.textMuted)),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: candidates.length,
+                  itemBuilder: (_, i) {
+                    final m = candidates[i];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.primaryNavy,
+                        child: Text(m.fullName.isNotEmpty ? m.fullName.characters.first.toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.white)),
+                      ),
+                      title: Text(m.fullName),
+                      subtitle: Text(m.email, style: const TextStyle(fontSize: 11.5)),
+                      onTap: () => Navigator.pop(ctx, m.userId),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -199,6 +365,13 @@ class _MoreTabState extends State<MoreTab> {
               if (widget.isAdmin) ...[
                 const Divider(height: 1),
                 _MenuTile(
+                  icon: Icons.edit_outlined,
+                  title: 'Rename organization',
+                  subtitle: 'Change the name and description',
+                  onTap: _renameOrg,
+                ),
+                const Divider(height: 1),
+                _MenuTile(
                   icon: Icons.admin_panel_settings_outlined,
                   title: 'Admin tools',
                   subtitle: 'Shares, privacy, invitations, down payments',
@@ -214,6 +387,17 @@ class _MoreTabState extends State<MoreTab> {
           ),
         ),
         const SizedBox(height: 20),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: _MenuTile(
+            icon: Icons.exit_to_app_rounded,
+            title: 'Leave organization',
+            subtitle: 'Your history is kept; you lose access to this organization',
+            color: AppTheme.errorRed,
+            onTap: _leaveOrg,
+          ),
+        ),
+        const SizedBox(height: 10),
         AppCard(
           padding: EdgeInsets.zero,
           child: _MenuTile(

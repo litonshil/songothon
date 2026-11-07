@@ -21,6 +21,9 @@ const (
 	MemberStatusPending   MemberStatus = "pending"
 	MemberStatusSuspended MemberStatus = "suspended"
 	MemberStatusRemoved   MemberStatus = "removed"
+	// MemberStatusLeft marks a member who left the organization on their own.
+	// Their membership row and all financial history are kept.
+	MemberStatusLeft MemberStatus = "left"
 )
 
 type ContributionFrequency string
@@ -157,6 +160,17 @@ type UpdateMemberRequest struct {
 	Role        OrgRole      `json:"role,omitempty" validate:"omitempty,oneof=org_admin member"`
 	SharesCount *int         `json:"shares_count,omitempty" validate:"omitempty,gte=0"`
 	Status      MemberStatus `json:"status,omitempty" validate:"omitempty,oneof=active invited suspended"`
+}
+
+type RenameOrganizationRequest struct {
+	Name        string  `json:"name" validate:"required,min=2,max=200"`
+	Description *string `json:"description,omitempty"`
+}
+
+type LeaveOrganizationRequest struct {
+	// SuccessorUserID is required when the last administrator leaves while
+	// other active members remain; that member is promoted to org_admin.
+	SuccessorUserID *uuid.UUID `json:"successor_user_id,omitempty"`
 }
 
 type UpdateOrgPrivacyRequest struct {

@@ -105,6 +105,9 @@ func TenantMiddleware(orgRepo OrgLookupRepository) echo.MiddlewareFunc {
 			if member.Status == domain.MemberStatusSuspended || member.Status == domain.MemberStatusRemoved {
 				return response.Forbidden(c, "Your membership in this organization is suspended")
 			}
+			if member.Status == domain.MemberStatusLeft {
+				return response.Forbidden(c, "You have left this organization")
+			}
 			if member.Status == domain.MemberStatusPending {
 				return response.Forbidden(c, "Your join request is pending approval")
 			}

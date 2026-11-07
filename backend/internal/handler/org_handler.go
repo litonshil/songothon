@@ -170,6 +170,40 @@ func (h *OrgHandler) UpdatePrivacy(c echo.Context) error {
 	})
 }
 
+func (h *OrgHandler) RenameOrg(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	adminID := middleware.GetUserID(c)
+
+	var req domain.RenameOrganizationRequest
+	if err := c.Bind(&req); err != nil {
+		return response.BadRequest(c, "Invalid organization payload")
+	}
+
+	updated, err := h.orgService.RenameOrganization(c.Request().Context(), org.ID, adminID, &req)
+	if err != nil {
+		return response.BadRequest(c, err.Error())
+	}
+	return response.Success(c, "Organization updated successfully", updated)
+}
+
+func (h *OrgHandler) LeaveOrg(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	userID := middleware.GetUserID(c)
+
+	var req domain.LeaveOrganizationRequest
+	// The body is optional; only an administrator handing over needs one.
+	if c.Request().ContentLength > 0 {
+		if err := c.Bind(&req); err != nil {
+			return response.BadRequest(c, "Invalid leave payload")
+		}
+	}
+
+	if err := h.orgService.LeaveOrganization(c.Request().Context(), org.ID, userID, &req); err != nil {
+		return response.BadRequest(c, err.Error())
+	}
+	return response.Success(c, "You have left the organization", nil)
+}
+
 func (h *OrgHandler) RemoveMember(c echo.Context) error {
 	org := middleware.GetCurrentOrg(c)
 	updaterID := middleware.GetUserID(c)

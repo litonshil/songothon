@@ -144,7 +144,10 @@ func (s *OrgService) JoinBySlug(ctx context.Context, userID uuid.UUID, slug stri
 		if existingMember.Status == domain.MemberStatusSuspended || existingMember.Status == domain.MemberStatusRemoved {
 			return nil, errors.New("your membership in this organization is suspended")
 		}
-		return existingMember, nil
+		// A member who left may ask to rejoin; that goes through approval again.
+		if existingMember.Status != domain.MemberStatusLeft {
+			return existingMember, nil
+		}
 	}
 
 	// Joining via slug creates a request that an administrator must approve.
@@ -312,6 +315,9 @@ func (s *OrgService) UpdateMember(ctx context.Context, orgID, updaterID uuid.UUI
 	if req.Status == domain.MemberStatusRemoved {
 		return s.RemoveMember(ctx, orgID, updaterID, memberID)
 	}
+	if current.Status == domain.MemberStatusLeft {
+		return errors.New("this member has left the organization; they must request to join again")
+	}
 
 	// Never allow the organization to lose its last administrator.
 	if current.Role == domain.RoleOrgAdmin && req.Role != "" && req.Role != domain.RoleOrgAdmin {
@@ -404,6 +410,130 @@ func (s *OrgService) RemoveMember(ctx context.Context, orgID, updaterID, memberI
 		"membership_removed",
 		map[string]string{"org_id": orgID.String()},
 	)
+	return nil
+}
+
+// RenameOrganization changes the organization's display name (and optionally its
+// description). The slug is unchanged so join codes stay valid.
+func (s *OrgService) RenameOrganization(ctx context.Context, orgID, adminID uuid.UUID, req *domain.RenameOrganizationRequest) (*domain.Organization, error) {
+	name := strings.TrimSpace(req.Name)
+	if len(name) < 2 || len(name) > 200 {
+		return nil, errors.New("organization name must be between 2 and 200 characters")
+	}
+	var description *string
+	if req.Description != nil {
+		d := strings.TrimSpace(*req.Description)
+		description = &d
+	}
+
+	before, err := s.orgRepo.GetByID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if before == nil {
+		return nil, errors.New("organization not found")
+	}
+
+	if err := s.orgRepo.UpdateDetails(ctx, orgID, name, description); err != nil {
+		return nil, err
+	}
+
+	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
+		OrgID:      &orgID,
+		UserID:     &adminID,
+		Action:     "RENAME_ORGANIZATION",
+		EntityType: "organizations",
+		EntityID:   &orgID,
+		DetailsJSON: map[string]interface{}{
+			"old_name":    before.Name,
+			"new_name":    name,
+			"description": description,
+		},
+	})
+
+	return s.orgRepo.GetByID(ctx, orgID)
+}
+
+// LeaveOrganization lets any member (administrators included) leave. Nothing is
+// deleted: the membership is marked 'left' and all history stays intact. If the
+// leaver is the last active administrator and other active members remain, a
+// successor must be named and is promoted to administrator.
+func (s *OrgService) LeaveOrganization(ctx context.Context, orgID, userID uuid.UUID, req *domain.LeaveOrganizationRequest) error {
+	current, err := s.orgRepo.GetMember(ctx, orgID, userID)
+	if err != nil {
+		return err
+	}
+	if current == nil || (current.Status != domain.MemberStatusActive && current.Status != domain.MemberStatusSuspended) {
+		return errors.New("you are not an active member of this organization")
+	}
+
+	var successor *uuid.UUID
+	if req != nil && req.SuccessorUserID != nil && *req.SuccessorUserID != uuid.Nil {
+		if *req.SuccessorUserID == userID {
+			return errors.New("you cannot choose yourself as the successor")
+		}
+		successor = req.SuccessorUserID
+	}
+
+	if current.Role == domain.RoleOrgAdmin && current.Status == domain.MemberStatusActive && successor == nil {
+		admins, err := s.orgRepo.CountAdmins(ctx, orgID)
+		if err != nil {
+			return err
+		}
+		if admins <= 1 {
+			others, err := s.orgRepo.CountActiveMembersExcept(ctx, orgID, userID)
+			if err != nil {
+				return err
+			}
+			if others > 0 {
+				return errors.New("you are the only administrator; choose a member to become administrator before leaving")
+			}
+		}
+	}
+
+	if err := s.orgRepo.LeaveOrganization(ctx, orgID, userID, successor); err != nil {
+		return err
+	}
+
+	details := map[string]interface{}{"previous_role": current.Role}
+	if successor != nil {
+		details["successor_user_id"] = successor.String()
+	}
+	_ = s.auditRepo.Log(ctx, &domain.AuditLog{
+		OrgID:       &orgID,
+		UserID:      &userID,
+		Action:      "LEAVE_ORGANIZATION",
+		EntityType:  "organization_members",
+		EntityID:    &current.ID,
+		DetailsJSON: details,
+	})
+
+	org, _ := s.orgRepo.GetByID(ctx, orgID)
+	orgName := "the organization"
+	if org != nil {
+		orgName = org.Name
+	}
+
+	if successor != nil {
+		_ = s.notifService.SendToUser(ctx, &orgID, *successor,
+			"You are now an administrator",
+			fmt.Sprintf("You have been made an administrator of %s.", orgName),
+			"membership_updated",
+			map[string]string{"org_id": orgID.String()},
+		)
+	}
+
+	leaverName := "A member"
+	if u, err := s.userRepo.GetByID(ctx, userID); err == nil && u != nil && u.FullName != "" {
+		leaverName = u.FullName
+	}
+	if adminIDs, err := s.orgRepo.ListActiveAdminIDs(ctx, orgID); err == nil && len(adminIDs) > 0 {
+		_ = s.notifService.SendToMembers(ctx, orgID, adminIDs,
+			"Member left",
+			fmt.Sprintf("%s has left %s.", leaverName, orgName),
+		)
+	}
+
 	return nil
 }
 

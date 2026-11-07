@@ -61,6 +61,11 @@ class SecureStorageService {
     return await _storage.read(key: _keyUserEmail);
   }
 
+  Future<void> clearCurrentOrg() async {
+    await _storage.delete(key: _keyCurrentOrgSlug);
+    await _storage.delete(key: _keyCurrentOrgId);
+  }
+
   Future<void> clearSession() async {
     await _storage.deleteAll();
   }

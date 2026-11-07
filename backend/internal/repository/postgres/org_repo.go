@@ -138,7 +138,7 @@ func (r *OrgRepository) ListUserOrganizations(ctx context.Context, userID uuid.U
 			m.role, m.shares_count, m.status
 		FROM organization_members m
 		JOIN organizations o ON m.org_id = o.id
-		WHERE m.user_id = $1 AND m.deleted_at IS NULL AND m.status NOT IN ('removed') AND o.deleted_at IS NULL
+		WHERE m.user_id = $1 AND m.deleted_at IS NULL AND m.status NOT IN ('removed', 'left') AND o.deleted_at IS NULL
 		ORDER BY m.joined_at DESC
 	`
 	rows, err := r.db.Pool.Query(ctx, query, userID)
@@ -490,6 +490,95 @@ func (r *OrgRepository) RemoveMember(ctx context.Context, orgID, userID uuid.UUI
 		return fmt.Errorf("member not found")
 	}
 	return nil
+}
+
+// UpdateDetails renames an organization and optionally changes its description.
+// The slug is left untouched so existing join links keep working.
+func (r *OrgRepository) UpdateDetails(ctx context.Context, orgID uuid.UUID, name string, description *string) error {
+	query := `
+		UPDATE organizations
+		SET name = $2, description = COALESCE($3, description), updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	res, err := r.db.Pool.Exec(ctx, query, orgID, name, description)
+	if err != nil {
+		return fmt.Errorf("failed to update organization: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("organization not found")
+	}
+	return nil
+}
+
+// LeaveOrganization marks the member as 'left' without deleting anything. When
+// successorID is set, that active member is promoted to org_admin in the same
+// transaction so the organization never ends up without an administrator.
+func (r *OrgRepository) LeaveOrganization(ctx context.Context, orgID, userID uuid.UUID, successorID *uuid.UUID) error {
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if successorID != nil {
+		res, err := tx.Exec(ctx, `
+			UPDATE organization_members
+			SET role = 'org_admin', updated_at = NOW()
+			WHERE org_id = $1 AND user_id = $2 AND status = 'active' AND deleted_at IS NULL
+		`, orgID, *successorID)
+		if err != nil {
+			return fmt.Errorf("failed to promote successor: %w", err)
+		}
+		if res.RowsAffected() == 0 {
+			return fmt.Errorf("successor must be an active member of this organization")
+		}
+	}
+
+	res, err := tx.Exec(ctx, `
+		UPDATE organization_members
+		SET status = 'left', role = 'member', left_at = NOW(), updated_at = NOW()
+		WHERE org_id = $1 AND user_id = $2 AND status IN ('active', 'suspended') AND deleted_at IS NULL
+	`, orgID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to leave organization: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("you are not an active member of this organization")
+	}
+
+	return tx.Commit(ctx)
+}
+
+// CountActiveMembersExcept returns the number of active members other than userID.
+func (r *OrgRepository) CountActiveMembersExcept(ctx context.Context, orgID, userID uuid.UUID) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM organization_members
+		WHERE org_id = $1 AND user_id <> $2 AND status = 'active' AND deleted_at IS NULL
+	`
+	var count int
+	err := r.db.Pool.QueryRow(ctx, query, orgID, userID).Scan(&count)
+	return count, err
+}
+
+// ListActiveAdminIDs returns the user IDs of every active administrator.
+func (r *OrgRepository) ListActiveAdminIDs(ctx context.Context, orgID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT user_id FROM organization_members
+		WHERE org_id = $1 AND role = 'org_admin' AND status = 'active' AND deleted_at IS NULL
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (r *OrgRepository) CountAdmins(ctx context.Context, orgID uuid.UUID) (int, error) {

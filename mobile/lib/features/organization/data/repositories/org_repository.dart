@@ -77,6 +77,42 @@ class OrgRepository {
     return await storageService.getCurrentOrgSlug();
   }
 
+  Future<OrganizationModel> renameOrganization({
+    required String slug,
+    required String name,
+    String? description,
+  }) async {
+    try {
+      final response = await apiClient.dio.patch(
+        ApiConstants.adminUpdateOrg(slug),
+        data: {
+          'name': name.trim(),
+          'description': ?description?.trim(),
+        },
+      );
+      return OrganizationModel.fromJson(response.data['data'] as Map<String, dynamic>);
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
+  /// Leaves the organization. Membership history is kept on the server; only
+  /// the status changes. The last admin must pass [successorUserId] when other
+  /// active members remain.
+  Future<void> leaveOrganization(String slug, {String? successorUserId}) async {
+    try {
+      await apiClient.dio.post(
+        ApiConstants.leaveOrg(slug),
+        data: {'successor_user_id': ?successorUserId},
+      );
+      if (await storageService.getCurrentOrgSlug() == slug) {
+        await storageService.clearCurrentOrg();
+      }
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
   Future<List<OrgMemberModel>> listMembers(String slug) async {
     try {
       final response = await apiClient.dio.get(ApiConstants.membersForOrg(slug));
