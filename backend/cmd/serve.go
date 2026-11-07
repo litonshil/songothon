@@ -22,6 +22,7 @@ import (
 	"songothon/internal/service"
 	"songothon/internal/worker"
 	"songothon/pkg/fcm"
+	"songothon/pkg/mailer"
 	"songothon/pkg/response"
 	"songothon/pkg/token"
 )
@@ -65,7 +66,20 @@ func runServer(ctx context.Context) error {
 
 	// 3. Services
 	notifService := service.NewNotificationService(notifRepo, userRepo, orgRepo, fcmClient)
-	authService := service.NewAuthService(userRepo, orgRepo, tokenMgr)
+	smtpCfg := config.SMTP()
+	mail := mailer.New(mailer.Config{
+		Host:       smtpCfg.Host,
+		Port:       smtpCfg.Port,
+		Username:   smtpCfg.Username,
+		Password:   smtpCfg.Password,
+		FromEmail:  smtpCfg.FromEmail,
+		FromName:   smtpCfg.FromName,
+		Encryption: smtpCfg.Encryption,
+	})
+	if !mail.Configured() {
+		log.Println("SMTP is not configured: password reset emails will not be sent")
+	}
+	authService := service.NewAuthService(userRepo, orgRepo, tokenMgr, mail, appCfg.Env)
 	orgService := service.NewOrgService(orgRepo, userRepo, auditRepo, notifService)
 	contribService := service.NewContributionService(contribRepo, orgRepo, auditRepo, notifService)
 	invService := service.NewInvestmentService(invRepo, auditRepo)

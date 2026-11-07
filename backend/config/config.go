@@ -11,9 +11,21 @@ import (
 var c Config
 
 type Config struct {
-	App *AppConfig
-	Db  *DbClient
-	FCM *FCMClient
+	App  *AppConfig
+	Db   *DbClient
+	FCM  *FCMClient
+	SMTP *SMTPConfig `mapstructure:"smtp"`
+}
+
+// SMTPConfig configures outgoing email (password reset codes, etc.).
+type SMTPConfig struct {
+	Host       string `mapstructure:"host"`
+	Port       int    `mapstructure:"port"`
+	Username   string `mapstructure:"username"`
+	Password   string `mapstructure:"password"`
+	FromEmail  string `mapstructure:"from_email"`
+	FromName   string `mapstructure:"from_name"`
+	Encryption string `mapstructure:"encryption"` // starttls (587), ssl (465) or none
 }
 
 type AppConfig struct {
@@ -75,6 +87,13 @@ func DB() *DbClient {
 
 func FCM() *FCMClient {
 	return c.FCM
+}
+
+func SMTP() *SMTPConfig {
+	if c.SMTP == nil {
+		return &SMTPConfig{}
+	}
+	return c.SMTP
 }
 
 func Load() error {
@@ -145,6 +164,14 @@ func setDefaultConfig() {
 	viper.SetDefault("db.db.max_life_time", 3600)
 	viper.SetDefault("db.db.max_idle_conn", 5)
 	viper.SetDefault("db.db.max_open_conn", 25)
+
+	viper.SetDefault("smtp.host", "")
+	viper.SetDefault("smtp.port", 587)
+	viper.SetDefault("smtp.username", "")
+	viper.SetDefault("smtp.password", "")
+	viper.SetDefault("smtp.from_email", "")
+	viper.SetDefault("smtp.from_name", "Songothon")
+	viper.SetDefault("smtp.encryption", "starttls")
 
 	viper.SetDefault("fcm.fcm.type", "service_account")
 	viper.SetDefault("fcm.fcm.project_id", "")

@@ -96,14 +96,14 @@ class AuthRepository {
     return token != null && token.isNotEmpty;
   }
 
-  Future<String?> forgotPassword(String email) async {
+  /// Asks the server to email a reset code. Returns the server's message.
+  Future<String> forgotPassword(String email) async {
     try {
       final response = await apiClient.dio.post(
         ApiConstants.forgotPassword,
         data: {'email': email.trim()},
       );
-      final data = response.data['data'] as Map<String, dynamic>?;
-      return data?['reset_token']?.toString();
+      return response.data['message']?.toString() ?? 'Check your email for a reset code.';
     } catch (e) {
       throw apiClient.extractErrorMessage(e);
     }

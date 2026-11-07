@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"html"
+	"log"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"songothon/internal/domain"
 	"songothon/internal/repository/postgres"
+	"songothon/pkg/mailer"
 	"songothon/pkg/token"
 )
 
@@ -21,13 +24,17 @@ type AuthService struct {
 	userRepo *postgres.UserRepository
 	orgRepo  *postgres.OrgRepository
 	tokenMgr *token.TokenManager
+	mailer   *mailer.Mailer
+	isProd   bool
 }
 
-func NewAuthService(userRepo *postgres.UserRepository, orgRepo *postgres.OrgRepository, tokenMgr *token.TokenManager) *AuthService {
+func NewAuthService(userRepo *postgres.UserRepository, orgRepo *postgres.OrgRepository, tokenMgr *token.TokenManager, m *mailer.Mailer, env string) *AuthService {
 	return &AuthService{
 		userRepo: userRepo,
 		orgRepo:  orgRepo,
 		tokenMgr: tokenMgr,
+		mailer:   m,
+		isProd:   strings.EqualFold(env, "production"),
 	}
 }
 
@@ -146,6 +153,18 @@ func (s *AuthService) Logout(ctx context.Context, userID uuid.UUID) error {
 	return s.userRepo.UpdateFCMToken(ctx, userID, "")
 }
 
+const (
+	resetCodeLength   = 8
+	resetCodeTTL      = 30 * time.Minute
+	resetCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no 0/O or 1/I
+)
+
+// forgotPasswordMessage is returned whether or not the account exists, so the
+// endpoint cannot be used to discover which emails are registered.
+const forgotPasswordMessage = "If an account exists for this email, a reset code has been sent. It expires in 30 minutes."
+
+// ForgotPassword emails a one-time reset code to the account holder. The code
+// is never returned in the API response.
 func (s *AuthService) ForgotPassword(ctx context.Context, email string) (*domain.ForgotPasswordResponse, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" {
@@ -157,41 +176,112 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email string) (*domain
 		return nil, fmt.Errorf("database query error: %w", err)
 	}
 	if user == nil {
-		return nil, errors.New("no account found with this email address")
+		return &domain.ForgotPasswordResponse{Message: forgotPasswordMessage}, nil
 	}
 
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return nil, fmt.Errorf("failed to generate reset token: %w", err)
+	if !s.mailer.Configured() && s.isProd {
+		log.Printf("forgot password: SMTP is not configured; cannot email reset code to user %s", user.ID)
+		return nil, errors.New("password reset email is temporarily unavailable. Please contact support")
 	}
-	resetToken := hex.EncodeToString(raw)
-	tokenHash := sha256.Sum256([]byte(resetToken))
-	if err := s.userRepo.CreatePasswordResetToken(ctx, user.ID, hex.EncodeToString(tokenHash[:]), time.Now().Add(30*time.Minute)); err != nil {
+
+	code, err := generateResetCode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate reset code: %w", err)
+	}
+	if err := s.userRepo.CreatePasswordResetToken(ctx, user.ID, hashResetCode(code), time.Now().Add(resetCodeTTL)); err != nil {
 		return nil, err
 	}
 
-	return &domain.ForgotPasswordResponse{
-		Message:    "Password reset token generated. It expires in 30 minutes.",
-		ResetToken: resetToken,
-	}, nil
+	display := code[:4] + "-" + code[4:]
+	if !s.mailer.Configured() {
+		// Development only: no SMTP server, so print the code for testing.
+		log.Printf("[DEV] SMTP not configured. Password reset code for %s: %s", email, display)
+		return &domain.ForgotPasswordResponse{Message: forgotPasswordMessage}, nil
+	}
+
+	subject, text, htmlBody := resetEmail(user.FullName, display)
+	if err := s.mailer.Send(user.Email, subject, text, htmlBody); err != nil {
+		log.Printf("forgot password: failed to send reset email to user %s: %v", user.ID, err)
+		return nil, errors.New("could not send the reset email right now. Please try again later")
+	}
+
+	return &domain.ForgotPasswordResponse{Message: forgotPasswordMessage}, nil
+}
+
+func generateResetCode() (string, error) {
+	raw := make([]byte, resetCodeLength)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	out := make([]byte, resetCodeLength)
+	for i, b := range raw {
+		out[i] = resetCodeAlphabet[int(b)%len(resetCodeAlphabet)] // 256 % 32 == 0, so no bias
+	}
+	return string(out), nil
+}
+
+// normalizeResetCode accepts "abcd-efgh", "ABCD EFGH", etc.
+func normalizeResetCode(code string) string {
+	code = strings.ToUpper(code)
+	return strings.Map(func(r rune) rune {
+		if r == '-' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, code)
+}
+
+func hashResetCode(code string) string {
+	sum := sha256.Sum256([]byte(normalizeResetCode(code)))
+	return hex.EncodeToString(sum[:])
+}
+
+func resetEmail(name, code string) (subject, text, htmlBody string) {
+	greeting := "Hello"
+	if strings.TrimSpace(name) != "" {
+		greeting = "Hello " + strings.TrimSpace(name)
+	}
+	subject = "Your Songothon password reset code"
+	text = fmt.Sprintf(`%s,
+
+We received a request to reset your Songothon password.
+
+Your reset code is: %s
+
+Enter this code in the app to choose a new password. It expires in 30 minutes and can be used once.
+
+If you did not request this, you can ignore this email; your password will not change.
+
+— Songothon
+`, greeting, code)
+	htmlBody = fmt.Sprintf(`<!doctype html>
+<html><body style="font-family:Arial,Helvetica,sans-serif;background:#f4f6fa;padding:24px;color:#1b2a41">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;padding:28px">
+    <h2 style="margin:0 0 12px">Reset your password</h2>
+    <p>%s,</p>
+    <p>We received a request to reset your Songothon password. Enter this code in the app:</p>
+    <p style="font-size:28px;font-weight:bold;letter-spacing:4px;text-align:center;background:#eef2f8;border-radius:8px;padding:14px">%s</p>
+    <p style="font-size:13px;color:#5b6b82">The code expires in 30 minutes and can be used once. If you did not request this, ignore this email; your password will not change.</p>
+  </div>
+</body></html>`, html.EscapeString(greeting), html.EscapeString(code))
+	return subject, text, htmlBody
 }
 
 func (s *AuthService) ResetPassword(ctx context.Context, req *domain.ResetPasswordRequest) error {
-	if strings.TrimSpace(req.Token) == "" {
-		return errors.New("reset token is required")
+	if normalizeResetCode(req.Token) == "" {
+		return errors.New("reset code is required")
 	}
 	if len(req.NewPassword) < 6 {
 		return errors.New("new password must be at least 6 characters")
 	}
 
-	tokenHash := sha256.Sum256([]byte(strings.TrimSpace(req.Token)))
-	hashHex := hex.EncodeToString(tokenHash[:])
+	hashHex := hashResetCode(req.Token)
 	userID, err := s.userRepo.GetUserIDByResetToken(ctx, hashHex)
 	if err != nil {
 		return err
 	}
 	if userID == uuid.Nil {
-		return errors.New("reset token is invalid or has expired")
+		return errors.New("reset code is invalid or has expired")
 	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)

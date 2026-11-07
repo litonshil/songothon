@@ -34,5 +34,14 @@
       "client_x509_cert_url": "",
       "universe_domain": "googleapis.com"
     }
+  },
+  "smtp": {
+    "host": "",
+    "port": 587,
+    "username": "",
+    "password": "",
+    "from_email": "",
+    "from_name": "Songothon",
+    "encryption": "starttls"
   }
 }
