@@ -41,6 +41,7 @@ class MemberCycleCollectionModel extends Equatable {
   final String userId;
   final String fullName;
   final bool isCurrentUser;
+  final bool isSuspended;
   final int? sharesCount;
   final double? expectedAmount;
   final double? paidAmount;
@@ -51,6 +52,7 @@ class MemberCycleCollectionModel extends Equatable {
     required this.userId,
     required this.fullName,
     required this.isCurrentUser,
+    this.isSuspended = false,
     this.sharesCount,
     this.expectedAmount,
     this.paidAmount,
@@ -65,6 +67,7 @@ class MemberCycleCollectionModel extends Equatable {
       userId: json['user_id']?.toString() ?? '',
       fullName: json['full_name']?.toString() ?? '',
       isCurrentUser: json['is_current_user'] as bool? ?? false,
+      isSuspended: json['is_suspended'] as bool? ?? false,
       sharesCount: (json['shares_count'] as num?)?.toInt(),
       expectedAmount: (json['expected_amount'] as num?)?.toDouble(),
       paidAmount: (json['paid_amount'] as num?)?.toDouble(),
@@ -78,6 +81,7 @@ class MemberCycleCollectionModel extends Equatable {
     userId,
     fullName,
     isCurrentUser,
+    isSuspended,
     sharesCount,
     expectedAmount,
     paidAmount,

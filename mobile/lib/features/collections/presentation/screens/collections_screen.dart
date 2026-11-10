@@ -343,9 +343,7 @@ class _CycleCollectionDetailScreenState
                               ? '${formatMoney(item.paidAmount ?? 0, widget.currency)} of ${formatMoney(item.expectedAmount ?? 0, widget.currency)}'
                                     '${(item.pendingAmount ?? 0) > 0 ? ' • ${formatMoney(item.pendingAmount!, widget.currency)} pending' : ''}'
                               : 'Payment details hidden',
-                          trailing: item.status != null
-                              ? StatusPill.forStatus(item.status!)
-                              : null,
+                          trailing: _memberTrailing(item),
                         ),
                       ),
                     ),
@@ -355,6 +353,20 @@ class _CycleCollectionDetailScreenState
             ),
     );
   }
+}
+
+Widget? _memberTrailing(MemberCycleCollectionModel item) {
+  final status = item.status != null
+      ? StatusPill.forStatus(item.status!)
+      : null;
+  if (!item.isSuspended) return status;
+  const suspended = StatusPill(label: 'Suspended', color: AppTheme.textMuted);
+  if (status == null) return suspended;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [status, const SizedBox(height: 4), suspended],
+  );
 }
 
 class _MiniStat extends StatelessWidget {

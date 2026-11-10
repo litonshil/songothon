@@ -23,6 +23,7 @@ type MemberCycleCollection struct {
 	UserID         uuid.UUID `json:"user_id"`
 	FullName       string    `json:"full_name"`
 	IsCurrentUser  bool      `json:"is_current_user"`
+	IsSuspended    bool      `json:"is_suspended"`
 	SharesCount    *int      `json:"shares_count,omitempty"`    // Omitted if financial visibility hidden
 	ExpectedAmount *float64  `json:"expected_amount,omitempty"` // Omitted if financial visibility hidden
 	PaidAmount     *float64  `json:"paid_amount,omitempty"`     // Omitted if financial visibility hidden

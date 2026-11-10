@@ -27,7 +27,7 @@ func (s *ReportService) ListCycleCollections(
 	result := make([]domain.CycleCollectionSummary, 0, len(cycles))
 	for _, cycle := range cycles {
 		summary := domain.CycleCollectionSummary{Cycle: cycle}
-		for _, m := range activeMembersForCycle(members, cycle) {
+		for _, m := range membersForCycle(members, cycle, totalsByCycle[cycle]) {
 			t := totalsByCycle[cycle][m.UserID]
 			summary.ExpectedAmount += float64(m.SharesCount) * basePrice
 			summary.CollectedAmount += t.Approved
@@ -64,7 +64,7 @@ func (s *ReportService) GetCycleCollection(
 		Cycle:   cycle,
 		Members: []domain.MemberCycleCollection{},
 	}
-	for _, m := range activeMembersForCycle(members, cycle) {
+	for _, m := range membersForCycle(members, cycle, cycleTotals) {
 		t := cycleTotals[m.UserID]
 		expected := float64(m.SharesCount) * basePrice
 		detail.ExpectedAmount += expected
@@ -79,6 +79,7 @@ func (s *ReportService) GetCycleCollection(
 			UserID:        m.UserID,
 			FullName:      m.FullName,
 			IsCurrentUser: isSelf,
+			IsSuspended:   m.Status == domain.MemberStatusSuspended,
 		}
 		if showFinancial || isSelf {
 			shares := m.SharesCount
@@ -104,13 +105,27 @@ func (s *ReportService) activeBasePrice(ctx context.Context, orgID uuid.UUID) fl
 	return 0
 }
 
-func activeMembersForCycle(members []domain.OrgMemberDetail, cycle string) []domain.OrgMemberDetail {
+// membersForCycle returns the members counted in a collection cycle: active
+// members who had joined by then, plus suspended members who paid (approved
+// or pending) in that cycle.
+func membersForCycle(
+	members []domain.OrgMemberDetail,
+	cycle string,
+	cycleTotals map[uuid.UUID]domain.CycleMemberTotal,
+) []domain.OrgMemberDetail {
 	var list []domain.OrgMemberDetail
 	for _, m := range members {
-		if m.Status != domain.MemberStatusActive {
+		if m.JoinedAt.Local().Format("2006-01") > cycle {
 			continue
 		}
-		if m.JoinedAt.Local().Format("2006-01") > cycle {
+		switch m.Status {
+		case domain.MemberStatusActive:
+		case domain.MemberStatusSuspended:
+			t := cycleTotals[m.UserID]
+			if t.Approved <= 0 && t.Pending <= 0 {
+				continue
+			}
+		default:
 			continue
 		}
 		list = append(list, m)
