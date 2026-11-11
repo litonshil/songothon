@@ -105,7 +105,16 @@ type DownPaymentScheme struct {
 	// Computed when listing: billing periods to date and the current one.
 	AllPeriods    []SchemePeriod `json:"periods,omitempty" db:"-"`
 	CurrentPeriod *SchemePeriod  `json:"current_period,omitempty" db:"-"`
+	// EditMode tells admins what can still be changed: SchemeEditFull,
+	// SchemeEditDatesOnly or SchemeEditLocked.
+	EditMode string `json:"edit_mode,omitempty" db:"-"`
 }
+
+const (
+	SchemeEditFull      = "full"
+	SchemeEditDatesOnly = "dates_only"
+	SchemeEditLocked    = "locked"
+)
 
 type OrganizationInvitation struct {
 	ID          uuid.UUID  `json:"id" db:"id"`

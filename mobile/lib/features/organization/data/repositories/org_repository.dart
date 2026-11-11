@@ -254,6 +254,33 @@ class OrgRepository {
     }
   }
 
+  Future<void> updateDownPaymentScheme({
+    required String slug,
+    required String schemeId,
+    required String title,
+    required double amount,
+    required String schemeType,
+    required String frequency,
+    String? startDate,
+    String? dueDate,
+  }) async {
+    try {
+      await apiClient.dio.put(
+        '/organizations/$slug/admin/down-payments/$schemeId',
+        data: {
+          'title': title.trim(),
+          'amount': amount,
+          'scheme_type': schemeType,
+          'frequency': frequency,
+          if (startDate != null && startDate.isNotEmpty) 'start_date': startDate,
+          if (dueDate != null && dueDate.isNotEmpty) 'due_date': dueDate,
+        },
+      );
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
   Future<List<DownPaymentSchemeModel>> listDownPaymentSchemes(String slug) async {
     try {
       final response = await apiClient.dio.get(ApiConstants.downPayments(slug));

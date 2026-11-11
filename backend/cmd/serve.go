@@ -80,7 +80,7 @@ func runServer(ctx context.Context) error {
 		log.Println("SMTP is not configured: password reset emails will not be sent")
 	}
 	authService := service.NewAuthService(userRepo, orgRepo, tokenMgr, mail, appCfg.Env)
-	orgService := service.NewOrgService(orgRepo, userRepo, auditRepo, notifService)
+	orgService := service.NewOrgService(orgRepo, contribRepo, userRepo, auditRepo, notifService)
 	contribService := service.NewContributionService(contribRepo, orgRepo, auditRepo, notifService)
 	invService := service.NewInvestmentService(invRepo, auditRepo)
 	expService := service.NewExpenseService(expRepo, auditRepo)
@@ -194,6 +194,7 @@ func runServer(ctx context.Context) error {
 	adminGroup.PATCH("/privacy", orgHandler.UpdatePrivacy)
 	adminGroup.POST("/share-config", orgHandler.ConfigureShares)
 	adminGroup.POST("/down-payments", orgHandler.CreateDownPaymentScheme)
+	adminGroup.PUT("/down-payments/:id", orgHandler.UpdateDownPaymentScheme)
 	adminGroup.GET("/down-payments/:id/status", reportHandler.GetDownPaymentReport)
 	adminGroup.POST("/investments", invHandler.CreateInvestment)
 	adminGroup.PUT("/investments/:id", invHandler.UpdateInvestment)

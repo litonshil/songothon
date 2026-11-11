@@ -200,13 +200,33 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
     }
   }
 
-  Future<void> _addScheme() async {
-    final title = TextEditingController();
-    final amount = TextEditingController();
-    final startDate = TextEditingController(text: DateTime.now().toIso8601String().split('T').first);
-    final dueDate = TextEditingController();
-    String type = 'mandatory';
-    String frequency = 'one_time';
+  Future<void> _addScheme() => _editScheme();
+
+  /// Creates a scheme, or edits [existing]. Once members have paid, only the
+  /// dates can change; once everyone has paid, nothing can.
+  Future<void> _editScheme([DownPaymentSchemeModel? existing]) async {
+    if (existing != null && existing.isLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Every member has already paid this down payment, so it can no longer be changed.'),
+      ));
+      return;
+    }
+    final isEdit = existing != null;
+    final fieldsEnabled = existing == null || existing.isFullyEditable;
+    final title = TextEditingController(text: existing?.title ?? '');
+    final amount = TextEditingController(
+      text: existing == null
+          ? ''
+          : (existing.amount == existing.amount.roundToDouble()
+              ? existing.amount.toStringAsFixed(0)
+              : existing.amount.toString()),
+    );
+    final startDate = TextEditingController(
+      text: existing?.startDate ?? DateTime.now().toIso8601String().split('T').first,
+    );
+    final dueDate = TextEditingController(text: existing?.dueDate ?? '');
+    String type = existing?.schemeType ?? 'mandatory';
+    String frequency = existing?.frequency ?? 'one_time';
     final save = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -231,15 +251,25 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text('Down Payment Scheme', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(isEdit ? 'Edit Down Payment' : 'Down Payment Scheme',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                const Text(
-                  'Create a separate recurring deposit with its own payment tracking.',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted, height: 1.4),
+                Text(
+                  !isEdit
+                      ? 'Create a separate recurring deposit with its own payment tracking.'
+                      : fieldsEnabled
+                          ? 'No member has paid yet, so every field can be changed.'
+                          : 'Members have already paid, so only the start and due dates can be changed.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: fieldsEnabled ? AppTheme.textMuted : AppTheme.warningOrange,
+                    height: 1.4,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 TextField(
                   controller: title,
+                  enabled: fieldsEnabled,
                   decoration: const InputDecoration(
                     labelText: 'Title',
                     hintText: 'e.g. Annual Development Fund',
@@ -249,6 +279,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                 const SizedBox(height: 14),
                 TextField(
                   controller: amount,
+                  enabled: fieldsEnabled,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Amount',
@@ -267,7 +298,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                     DropdownMenuItem(value: 'mandatory', child: Text('Mandatory')),
                     DropdownMenuItem(value: 'optional', child: Text('Optional')),
                   ],
-                  onChanged: (value) => setSheetState(() => type = value ?? 'mandatory'),
+                  onChanged: fieldsEnabled ? (value) => setSheetState(() => type = value ?? 'mandatory') : null,
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
@@ -281,7 +312,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                     DropdownMenuItem(value: 'quarterly', child: Text('Quarterly')),
                     DropdownMenuItem(value: 'yearly', child: Text('Yearly')),
                   ],
-                  onChanged: (value) => setSheetState(() => frequency = value ?? 'one_time'),
+                  onChanged: fieldsEnabled ? (value) => setSheetState(() => frequency = value ?? 'one_time') : null,
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -315,7 +346,7 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Create Scheme'),
+                  child: Text(isEdit ? 'Save Changes' : 'Create Scheme'),
                 ),
               ],
             ),
@@ -325,17 +356,34 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
     );
     if (save != true || !mounted) return;
     try {
-      await context.read<OrgRepository>().createDownPaymentScheme(
-        slug: widget.orgSlug,
-        title: title.text.trim(),
-        amount: double.tryParse(amount.text) ?? 0,
-        schemeType: type,
-        frequency: frequency,
-        startDate: startDate.text.trim(),
-        dueDate: dueDate.text.trim(),
-      );
+      final repo = context.read<OrgRepository>();
+      if (existing == null) {
+        await repo.createDownPaymentScheme(
+          slug: widget.orgSlug,
+          title: title.text.trim(),
+          amount: double.tryParse(amount.text) ?? 0,
+          schemeType: type,
+          frequency: frequency,
+          startDate: startDate.text.trim(),
+          dueDate: dueDate.text.trim(),
+        );
+      } else {
+        await repo.updateDownPaymentScheme(
+          slug: widget.orgSlug,
+          schemeId: existing.id,
+          // Locked fields are sent unchanged so the server only sees date edits.
+          title: fieldsEnabled ? title.text.trim() : existing.title,
+          amount: fieldsEnabled ? (double.tryParse(amount.text) ?? 0) : existing.amount,
+          schemeType: type,
+          frequency: frequency,
+          startDate: startDate.text.trim(),
+          dueDate: dueDate.text.trim(),
+        );
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Down payment scheme created.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isEdit ? 'Down payment updated.' : 'Down payment scheme created.'),
+      ));
       _load();
     } catch (e) {
       if (!mounted) return;
@@ -682,7 +730,22 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                           title: item.title,
                           subtitle: '${formatMoney(item.amount)} • ${humanize(item.schemeType)} • ${humanize(item.frequency)}'
                               '${item.currentPeriod != null ? '\n${item.currentPeriod!.label} • due ${item.currentPeriod!.dueDate}' : ''}',
-                          trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: item.isLocked ? 'Everyone has paid' : 'Edit',
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  item.isLocked ? Icons.lock_outline_rounded : Icons.edit_outlined,
+                                  size: 20,
+                                  color: AppTheme.textMuted,
+                                ),
+                                onPressed: () => _editScheme(item),
+                              ),
+                              const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+                            ],
+                          ),
                           onTap: () => DownPaymentStatusScreen.open(context, orgSlug: widget.orgSlug, scheme: item),
                         ),
                       )),

@@ -345,6 +345,24 @@ func (r *OrgRepository) CreateDownPaymentScheme(ctx context.Context, dp *domain.
 	).Scan(&dp.CreatedAt, &dp.UpdatedAt)
 }
 
+// UpdateDownPaymentScheme saves a scheme's editable fields.
+func (r *OrgRepository) UpdateDownPaymentScheme(ctx context.Context, dp *domain.DownPaymentScheme) error {
+	query := `
+		UPDATE down_payment_schemes
+		SET title = $3, amount = $4, scheme_type = $5, frequency = $6,
+			start_date = $7::date, due_date = $8::date, updated_at = NOW()
+		WHERE org_id = $1 AND id = $2 AND is_active = true
+		RETURNING updated_at
+	`
+	err := r.db.Pool.QueryRow(ctx, query,
+		dp.OrgID, dp.ID, dp.Title, dp.Amount, dp.SchemeType, dp.Frequency, dp.StartDate, dp.DueDate,
+	).Scan(&dp.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("down payment scheme not found")
+	}
+	return err
+}
+
 const downPaymentSchemeColumns = `
 	id, org_id, title, amount, scheme_type, frequency,
 	TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(due_date, 'YYYY-MM-DD'), is_active, created_at, updated_at`

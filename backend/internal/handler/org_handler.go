@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"songothon/internal/domain"
@@ -292,6 +294,30 @@ func (h *OrgHandler) CreateDownPaymentScheme(c echo.Context) error {
 	}
 
 	return response.Created(c, "Down payment scheme created successfully", scheme)
+}
+
+func (h *OrgHandler) UpdateDownPaymentScheme(c echo.Context) error {
+	org := middleware.GetCurrentOrg(c)
+	adminID := middleware.GetUserID(c)
+	schemeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return response.BadRequest(c, "Invalid scheme ID format")
+	}
+
+	var req domain.CreateDownPaymentSchemeRequest
+	if err := c.Bind(&req); err != nil {
+		return response.BadRequest(c, "Invalid down payment payload")
+	}
+
+	scheme, err := h.orgService.UpdateDownPaymentScheme(c.Request().Context(), org.ID, adminID, schemeID, &req)
+	if errors.Is(err, service.ErrSchemeNotFound) {
+		return response.NotFound(c, err.Error())
+	}
+	if err != nil {
+		return response.BadRequest(c, err.Error())
+	}
+
+	return response.Success(c, "Down payment scheme updated successfully", scheme)
 }
 
 func (h *OrgHandler) ListDownPaymentSchemes(c echo.Context) error {

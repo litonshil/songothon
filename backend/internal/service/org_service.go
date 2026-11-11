@@ -16,6 +16,7 @@ import (
 
 type OrgService struct {
 	orgRepo      *postgres.OrgRepository
+	contribRepo  *postgres.ContributionRepository
 	userRepo     *postgres.UserRepository
 	auditRepo    *postgres.AuditRepository
 	notifService *NotificationService
@@ -23,12 +24,14 @@ type OrgService struct {
 
 func NewOrgService(
 	orgRepo *postgres.OrgRepository,
+	contribRepo *postgres.ContributionRepository,
 	userRepo *postgres.UserRepository,
 	auditRepo *postgres.AuditRepository,
 	notifService *NotificationService,
 ) *OrgService {
 	return &OrgService{
 		orgRepo:      orgRepo,
+		contribRepo:  contribRepo,
 		userRepo:     userRepo,
 		auditRepo:    auditRepo,
 		notifService: notifService,
@@ -650,7 +653,9 @@ func (s *OrgService) ConfigureShares(ctx context.Context, orgID, adminID uuid.UU
 	return nil
 }
 
-func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID uuid.UUID, req *domain.CreateDownPaymentSchemeRequest) (*domain.DownPaymentScheme, error) {
+// schemeFromRequest validates a create/update payload and returns the scheme
+// fields it describes. A missing start date defaults to today.
+func schemeFromRequest(req *domain.CreateDownPaymentSchemeRequest) (*domain.DownPaymentScheme, error) {
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		return nil, errors.New("scheme title is required")
@@ -658,10 +663,11 @@ func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID
 	if req.Amount <= 0 {
 		return nil, errors.New("amount must be greater than zero")
 	}
-	switch req.SchemeType {
+	schemeType := req.SchemeType
+	switch schemeType {
 	case "mandatory", "optional":
 	case "":
-		req.SchemeType = "mandatory"
+		schemeType = "mandatory"
 	default:
 		return nil, errors.New("scheme type must be mandatory or optional")
 	}
@@ -685,16 +691,23 @@ func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID
 	if dueDate != nil && *dueDate < *startDate {
 		return nil, errors.New("due date cannot be before the start date")
 	}
-
-	dp := &domain.DownPaymentScheme{
-		OrgID:      orgID,
+	return &domain.DownPaymentScheme{
 		Title:      title,
 		Amount:     req.Amount,
-		SchemeType: req.SchemeType,
+		SchemeType: schemeType,
 		Frequency:  req.Frequency,
 		StartDate:  startDate,
 		DueDate:    dueDate,
+	}, nil
+}
+
+func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID uuid.UUID, req *domain.CreateDownPaymentSchemeRequest) (*domain.DownPaymentScheme, error) {
+	dp, err := schemeFromRequest(req)
+	if err != nil {
+		return nil, err
 	}
+	dp.OrgID = orgID
+	title, startDate := dp.Title, dp.StartDate
 
 	if err := s.orgRepo.CreateDownPaymentScheme(ctx, dp); err != nil {
 		return nil, fmt.Errorf("failed to create down payment scheme: %w", err)
@@ -708,9 +721,9 @@ func (s *OrgService) CreateDownPaymentScheme(ctx context.Context, orgID, adminID
 		EntityID:   &dp.ID,
 		DetailsJSON: map[string]interface{}{
 			"title":       title,
-			"amount":      req.Amount,
-			"frequency":   req.Frequency,
-			"scheme_type": req.SchemeType,
+			"amount":      dp.Amount,
+			"frequency":   dp.Frequency,
+			"scheme_type": dp.SchemeType,
 			"start_date":  *startDate,
 		},
 	})
@@ -784,6 +797,24 @@ func (s *OrgService) ListDownPaymentSchemes(ctx context.Context, orgID uuid.UUID
 	if schemes == nil {
 		schemes = []domain.DownPaymentScheme{}
 	}
-	decorateSchemes(schemes, time.Now())
+	now := time.Now()
+	decorateSchemes(schemes, now)
+	if len(schemes) == 0 {
+		return schemes, nil
+	}
+
+	members, err := s.orgRepo.ListMembers(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	totals, err := s.contribRepo.ListSchemeTotals(ctx, orgID, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	idx := indexSchemeTotals(totals)
+	active := activeMemberIDs(members)
+	for i := range schemes {
+		schemes[i].EditMode = schemeEditMode(&schemes[i], idx[schemes[i].ID], active, now)
+	}
 	return schemes, nil
 }

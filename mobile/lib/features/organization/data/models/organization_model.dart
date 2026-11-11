@@ -246,6 +246,9 @@ class DownPaymentSchemeModel extends Equatable {
   final List<SchemePeriodModel> periods;
   final SchemePeriodModel? currentPeriod;
 
+  /// What an admin may still change: 'full', 'dates_only' or 'locked'.
+  final String editMode;
+
   const DownPaymentSchemeModel({
     required this.id,
     required this.orgId,
@@ -258,9 +261,12 @@ class DownPaymentSchemeModel extends Equatable {
     this.isActive = true,
     this.periods = const [],
     this.currentPeriod,
+    this.editMode = 'full',
   });
 
   bool get isMandatory => schemeType == 'mandatory';
+  bool get isFullyEditable => editMode == 'full';
+  bool get isLocked => editMode == 'locked';
 
   factory DownPaymentSchemeModel.fromJson(Map<String, dynamic> json) {
     return DownPaymentSchemeModel(
@@ -277,11 +283,12 @@ class DownPaymentSchemeModel extends Equatable {
           .map((e) => SchemePeriodModel.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList(),
       currentPeriod: SchemePeriodModel.tryParse(json['current_period']),
+      editMode: json['edit_mode']?.toString() ?? 'full',
     );
   }
 
   @override
-  List<Object?> get props => [id, orgId, title, amount, schemeType, frequency, startDate, dueDate, isActive, periods, currentPeriod];
+  List<Object?> get props => [id, orgId, title, amount, schemeType, frequency, startDate, dueDate, isActive, periods, currentPeriod, editMode];
 }
 
 /// Admin view: every active member's standing on a scheme for one period.
