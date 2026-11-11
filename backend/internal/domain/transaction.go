@@ -15,6 +15,7 @@ const (
 	TxInvestmentLiquidation  TransactionType = "investment_liquidation"
 	TxExpense                TransactionType = "expense"
 	TxIncome                 TransactionType = "income"
+	TxSettlement             TransactionType = "settlement"
 	TxOther                  TransactionType = "other"
 )
 

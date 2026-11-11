@@ -2,6 +2,7 @@ import '../../../../core/api/api_client.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../models/organization_model.dart';
+import '../models/settlement_model.dart';
 
 class OrgRepository {
   final ApiClient apiClient;
@@ -213,6 +214,52 @@ class OrgRepository {
   Future<void> removeMember(String slug, String userId) async {
     try {
       await apiClient.dio.delete(ApiConstants.adminRemoveMember(slug, userId));
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
+  /// Calculates what [userId] would be paid if settled now. Changes nothing.
+  Future<SettlementPreviewModel> getSettlementPreview(String slug, String userId) async {
+    try {
+      final response = await apiClient.dio.get(ApiConstants.adminMemberSettlement(slug, userId));
+      return SettlementPreviewModel.fromJson(Map<String, dynamic>.from(response.data['data'] as Map));
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
+  /// Pays the member out and ends their membership. [finalAmount] defaults to
+  /// the calculated amount on the server; a different amount needs [notes].
+  Future<MemberSettlementModel> settleMember({
+    required String slug,
+    required String userId,
+    double? finalAmount,
+    required String paymentMethod,
+    String trxId = '',
+    String notes = '',
+  }) async {
+    try {
+      final response = await apiClient.dio.post(
+        ApiConstants.adminMemberSettlement(slug, userId),
+        data: {
+          'final_amount': ?finalAmount,
+          'payment_method': paymentMethod,
+          'trx_id': trxId.trim(),
+          'notes': notes.trim(),
+        },
+      );
+      return MemberSettlementModel.fromJson(Map<String, dynamic>.from(response.data['data'] as Map));
+    } catch (e) {
+      throw apiClient.extractErrorMessage(e);
+    }
+  }
+
+  Future<List<MemberSettlementModel>> listSettlements(String slug) async {
+    try {
+      final response = await apiClient.dio.get(ApiConstants.adminSettlements(slug));
+      final list = response.data['data'] as List? ?? [];
+      return list.map((item) => MemberSettlementModel.fromJson(item as Map<String, dynamic>)).toList();
     } catch (e) {
       throw apiClient.extractErrorMessage(e);
     }

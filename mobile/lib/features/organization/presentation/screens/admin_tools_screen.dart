@@ -9,6 +9,7 @@ import '../../../shared/presentation/widgets/app_widgets.dart';
 import '../../data/models/organization_model.dart';
 import '../../data/repositories/org_repository.dart';
 import 'down_payment_status_screen.dart';
+import 'settlements_screen.dart';
 
 class AdminToolsScreen extends StatefulWidget {
   final String orgSlug;
@@ -749,6 +750,19 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                           onTap: () => DownPaymentStatusScreen.open(context, orgSlug: widget.orgSlug, scheme: item),
                         ),
                       )),
+                    const SizedBox(height: 20),
+                    const SectionHeader(title: 'Member Settlements'),
+                    AppCard(
+                      padding: EdgeInsets.zero,
+                      child: ListTile(
+                        leading: const Icon(Icons.handshake_outlined, color: AppTheme.primaryNavy),
+                        title: const Text('Settlement history', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Payouts to members who left with their deposit. Settle a member from the Members tab.',
+                            style: TextStyle(fontSize: 11)),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => SettlementsScreen.open(context, orgSlug: widget.orgSlug),
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     const SectionHeader(title: 'Communications'),
                     AppCard(

@@ -6,6 +6,7 @@ import '../../../dashboard/data/repositories/dashboard_repository.dart';
 import '../../data/models/organization_model.dart';
 import '../../data/repositories/org_repository.dart';
 import '../../../shared/presentation/widgets/app_widgets.dart';
+import 'settle_member_screen.dart';
 
 class MembersTab extends StatefulWidget {
   final String orgSlug;
@@ -264,6 +265,16 @@ class _MembersTabState extends State<MembersTab> {
                   child: const Text('Save Assignment'),
                 ),
                 const SizedBox(height: 6),
+                if (member.status == 'active' || member.status == 'suspended')
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _settleMember(member);
+                    },
+                    style: TextButton.styleFrom(foregroundColor: AppTheme.darkGreen),
+                    icon: const Icon(Icons.handshake_outlined, size: 18),
+                    label: const Text('Settle & pay out deposit'),
+                  ),
                 TextButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
@@ -296,6 +307,18 @@ class _MembersTabState extends State<MembersTab> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorRed));
     }
+  }
+
+  Future<void> _settleMember(OrgMemberModel member) async {
+    final settled = await SettleMemberScreen.open(
+      context,
+      orgSlug: widget.orgSlug,
+      userId: member.userId,
+      memberName: member.fullName,
+    );
+    if (!settled || !mounted) return;
+    _load();
+    widget.onRefreshShell();
   }
 
   Future<void> _removeMember(OrgMemberModel member) async {

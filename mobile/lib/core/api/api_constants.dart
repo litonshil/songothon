@@ -70,6 +70,8 @@ class ApiConstants {
   static String adminInviteMember(String slug) => '/organizations/$slug/admin/members/invite';
   static String adminUpdateMember(String slug, String userId) => '/organizations/$slug/admin/members/$userId';
   static String adminRemoveMember(String slug, String userId) => '/organizations/$slug/admin/members/$userId';
+  static String adminMemberSettlement(String slug, String userId) => '/organizations/$slug/admin/members/$userId/settlement';
+  static String adminSettlements(String slug) => '/organizations/$slug/admin/settlements';
   static String adminJoinRequests(String slug) => '/organizations/$slug/admin/join-requests';
   static String adminApproveJoinRequest(String slug, String userId) => '/organizations/$slug/admin/join-requests/$userId/approve';
   static String adminRejectJoinRequest(String slug, String userId) => '/organizations/$slug/admin/join-requests/$userId/reject';

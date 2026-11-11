@@ -56,6 +56,7 @@ func runServer(ctx context.Context) error {
 	incRepo := postgres.NewIncomeRepository(db)
 	notifRepo := postgres.NewNotificationRepository(db)
 	auditRepo := postgres.NewAuditRepository(db)
+	settlementRepo := postgres.NewSettlementRepository(db)
 
 	// 2. Shared modules
 	tokenMgr := token.NewTokenManager(appCfg.JWTSecret, time.Duration(appCfg.JWTExpiryHours)*time.Hour, "songothon-api")
@@ -86,6 +87,7 @@ func runServer(ctx context.Context) error {
 	expService := service.NewExpenseService(expRepo, auditRepo)
 	incService := service.NewIncomeService(incRepo, auditRepo)
 	reportService := service.NewReportService(orgRepo, contribRepo, invRepo, expRepo, incRepo)
+	settlementService := service.NewSettlementService(settlementRepo, orgRepo, contribRepo, invRepo, expRepo, incRepo, userRepo, auditRepo, notifService)
 
 	// 4. Handlers
 	authHandler := handler.NewAuthHandler(authService)
@@ -96,6 +98,7 @@ func runServer(ctx context.Context) error {
 	incHandler := handler.NewIncomeHandler(incService)
 	reportHandler := handler.NewReportHandler(reportService)
 	notifHandler := handler.NewNotificationHandler(notifService)
+	settlementHandler := handler.NewSettlementHandler(settlementService)
 
 	// 5. Background dues worker
 	workerCtx, workerCancel := context.WithCancel(context.Background())
@@ -186,6 +189,9 @@ func runServer(ctx context.Context) error {
 	adminGroup.POST("/members/invite", orgHandler.InviteMember)
 	adminGroup.PATCH("/members/:member_id", orgHandler.UpdateMember)
 	adminGroup.DELETE("/members/:member_id", orgHandler.RemoveMember)
+	adminGroup.GET("/members/:member_id/settlement", settlementHandler.PreviewSettlement)
+	adminGroup.POST("/members/:member_id/settlement", settlementHandler.SettleMember)
+	adminGroup.GET("/settlements", settlementHandler.ListSettlements)
 	adminGroup.GET("/join-requests", orgHandler.ListJoinRequests)
 	adminGroup.POST("/join-requests/:member_id/approve", orgHandler.ApproveJoinRequest)
 	adminGroup.POST("/join-requests/:member_id/reject", orgHandler.RejectJoinRequest)
