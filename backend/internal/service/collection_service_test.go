@@ -86,3 +86,23 @@ func TestMembersForCycleSuspended(t *testing.T) {
 		})
 	}
 }
+
+func TestSortCollectionRowsUnpaidFirst(t *testing.T) {
+	st := func(s string) *string { return &s }
+	rows := []domain.MemberCycleCollection{
+		{FullName: "A", Status: st("Paid")},
+		{FullName: "B", Status: st("Unpaid")},
+		{FullName: "C"}, // status hidden
+		{FullName: "D", Status: st("Pending")},
+		{FullName: "E", Status: st("Unpaid")},
+		{FullName: "F", Status: st("Partially Paid")},
+	}
+	sortCollectionRows(rows)
+	got := ""
+	for _, r := range rows {
+		got += r.FullName
+	}
+	if want := "BEFDAC"; got != want {
+		t.Fatalf("order = %s, want %s", got, want)
+	}
+}

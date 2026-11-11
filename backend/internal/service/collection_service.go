@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -94,8 +95,32 @@ func (s *ReportService) GetCycleCollection(
 		}
 		detail.Members = append(detail.Members, row)
 	}
+	sortCollectionRows(detail.Members)
 	detail.CollectionRate = collectionRate(detail.CollectedAmount, detail.ExpectedAmount)
 	return detail, nil
+}
+
+// collectionStatusRank orders rows so the members who still owe come first.
+// Rows whose status is hidden from the viewer sort last.
+var collectionStatusRank = map[string]int{
+	"Unpaid":         0,
+	"Partially Paid": 1,
+	"Pending":        2,
+	"Paid":           3,
+}
+
+// sortCollectionRows puts unpaid members at the top, then partially paid,
+// pending and paid. Within a group the existing order (role, name) is kept.
+func sortCollectionRows(rows []domain.MemberCycleCollection) {
+	rank := func(r domain.MemberCycleCollection) int {
+		if r.Status != nil {
+			if v, ok := collectionStatusRank[*r.Status]; ok {
+				return v
+			}
+		}
+		return len(collectionStatusRank)
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rank(rows[i]) < rank(rows[j]) })
 }
 
 func (s *ReportService) activeBasePrice(ctx context.Context, orgID uuid.UUID) float64 {
